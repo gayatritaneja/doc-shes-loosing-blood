@@ -1,0 +1,10 @@
+8
+2
+P1,0,3,8,Emergency
+P2,1,1,3,Critical
+P3,1,2,4,Urgent
+P4,2,1,2,Critical
+P5,4,3,3,General
+P6,4,3,2,General
+P7,12,2,1,Urgent
+P8,15,1,2,Critical
