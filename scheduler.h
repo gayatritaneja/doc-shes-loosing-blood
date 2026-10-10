@@ -1,0 +1,32 @@
+#ifndef SCHEDULER_H
+#define SCHEDULER_H
+
+#define MAX_PATIENTS 1000
+#define MAX_ID_LENGTH 32
+#define NUM_DOCTORS 2
+
+typedef struct {
+    char id[MAX_ID_LENGTH];
+    char category[MAX_ID_LENGTH];
+
+    int arrival_time;
+    int priority;
+    int service_time;
+    int remaining_time;
+
+    int first_start_time;
+    int completion_time;
+} Patient;
+
+/* Shared input/output functions, to be implemented in a separate module. */
+int read_input(const char *filename,
+               Patient patients[],
+               int *n,
+               int *quantum);
+
+void print_results(Patient patients[], int n);
+
+/* Scheduling algorithm implemented in priority_preemptive.c. */
+int simulate_priority_preemptive(Patient patients[], int n);
+
+#endif
