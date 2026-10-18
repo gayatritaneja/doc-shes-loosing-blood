@@ -1,26 +1,4 @@
-#include <string.h>
 #include "scheduler.h"
-
-/* Returns non-zero if patient a should be served before patient b. */
-typedef int (*BetterFn)(const Patient *a, const Patient *b);
-
-/* FCFS: earlier arrival first, then lexicographically smaller ID. */
-static int fcfs_better(const Patient *a, const Patient *b)
-{
-    if (a->arrival_time != b->arrival_time) {
-        return a->arrival_time < b->arrival_time;
-    }
-    return strcmp(a->id, b->id) < 0;
-}
-
-/* Priority: smaller priority value, then earlier arrival, then smaller ID. */
-static int priority_better(const Patient *a, const Patient *b)
-{
-    if (a->priority != b->priority) {
-        return a->priority < b->priority;
-    }
-    return fcfs_better(a, b);
-}
 
 /*
  * Shared non-preemptive engine for NUM_DOCTORS identical doctors.
@@ -28,7 +6,7 @@ static int priority_better(const Patient *a, const Patient *b)
  * is started and runs to completion. If nobody has arrived yet, that
  * doctor idles until the next arrival.
  */
-static int run_nonpreemptive(Patient patients[], int n, BetterFn better)
+int run_nonpreemptive(Patient patients[], int n, BetterFn better)
 {
     int free_at[NUM_DOCTORS] = {0};
     int scheduled[MAX_PATIENTS] = {0};
@@ -82,14 +60,4 @@ static int run_nonpreemptive(Patient patients[], int n, BetterFn better)
         done++;
     }
     return 0;
-}
-
-int simulate_fcfs(Patient patients[], int n)
-{
-    return run_nonpreemptive(patients, n, fcfs_better);
-}
-
-int simulate_priority_nonpreemptive(Patient patients[], int n)
-{
-    return run_nonpreemptive(patients, n, priority_better);
 }

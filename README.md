@@ -15,7 +15,7 @@ executable:
 
 ```
 gcc -std=c11 -Wall -Wextra -Wpedantic -Werror \
-  main.c io.c priority_preemptive.c nonpreemptive.c -o scheduler
+  main.c io.c priority_preemptive.c nonpreemptive_core.c fcfs.c priority.c -o scheduler
 ```
 
 You can use `clang` or `cc` instead of `gcc`.

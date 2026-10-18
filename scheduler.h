@@ -5,7 +5,8 @@
 #define MAX_ID_LENGTH 32
 #define NUM_DOCTORS 2
 
-typedef struct {
+typedef struct
+{
     char id[MAX_ID_LENGTH];
     char category[MAX_ID_LENGTH];
 
@@ -30,5 +31,10 @@ void print_results(Patient patients[], int n);
 int simulate_priority_preemptive(Patient patients[], int n);
 int simulate_fcfs(Patient patients[], int n);
 int simulate_priority_nonpreemptive(Patient patients[], int n);
+
+/* Shared non-preemptive engine (nonpreemptive_core.c). `better` returns
+ * non-zero if patient a should be served before patient b. */
+typedef int (*BetterFn)(const Patient *a, const Patient *b);
+int run_nonpreemptive(Patient patients[], int n, BetterFn better);
 
 #endif
