@@ -28,5 +28,7 @@ void print_results(Patient patients[], int n);
 
 /* Scheduling algorithm implemented in priority_preemptive.c. */
 int simulate_priority_preemptive(Patient patients[], int n);
+int simulate_fcfs(Patient patients[], int n);
+int simulate_priority_nonpreemptive(Patient patients[], int n);
 
 #endif

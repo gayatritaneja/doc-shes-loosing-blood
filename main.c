@@ -22,6 +22,8 @@ typedef struct {
 } AlgorithmEntry;
 
 static const AlgorithmEntry algorithms[] = {
+    {"FCFS", simulate_fcfs},
+    {"PRIORITY", simulate_priority_nonpreemptive},
     {"PRIORITY_PREEMPTIVE", simulate_priority_preemptive}
 };
 
