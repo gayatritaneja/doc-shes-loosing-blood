@@ -25,13 +25,15 @@
 
 static char *trim(char *s)
 {
-    while (isspace((unsigned char)*s)) {
+    while (isspace((unsigned char)*s))
+    {
         s++;
     }
 
     char *end = s + strlen(s);
 
-    while (end > s && isspace((unsigned char)end[-1])) {
+    while (end > s && isspace((unsigned char)end[-1]))
+    {
         *--end = '\0';
     }
 
@@ -43,19 +45,22 @@ static int parse_integer(const char *text, int *value)
     char *end;
     long number;
 
-    if (text == NULL || *text == '\0') {
+    if (text == NULL || *text == '\0')
+    {
         return 0;
     }
 
     errno = 0;
     number = strtol(text, &end, 10);
 
-    while (isspace((unsigned char)*end)) {
+    while (isspace((unsigned char)*end))
+    {
         end++;
     }
 
     if (errno != 0 || end == text || *end != '\0' ||
-        number < 0 || number > INT_MAX) {
+        number < 0 || number > INT_MAX)
+    {
         return 0;
     }
 
@@ -72,33 +77,42 @@ static int split_fields(char *line, char *fields[], int capacity)
     int count = 0;
     char *p = trim(line);
 
-    if (strchr(p, ',') != NULL) {
+    if (strchr(p, ',') != NULL)
+    {
         char *start = p;
 
-        while (1) {
-            if (count >= capacity) {
+        while (1)
+        {
+            if (count >= capacity)
+            {
                 return -1;
             }
 
             char *comma = strchr(start, ',');
 
-            if (comma != NULL) {
+            if (comma != NULL)
+            {
                 *comma = '\0';
             }
 
             fields[count++] = trim(start);
 
-            if (comma == NULL) {
+            if (comma == NULL)
+            {
                 break;
             }
 
             start = comma + 1;
         }
-    } else {
+    }
+    else
+    {
         char *token = strtok(p, " \t\r\n");
 
-        while (token != NULL) {
-            if (count >= capacity) {
+        while (token != NULL)
+        {
+            if (count >= capacity)
+            {
                 return -1;
             }
 
@@ -123,14 +137,16 @@ int read_input(const char *filename,
     int expected_count = -1;
 
     if (filename == NULL || patients == NULL ||
-        n == NULL || quantum == NULL) {
+        n == NULL || quantum == NULL)
+    {
         fprintf(stderr, "Error: invalid input arguments.\n");
         return 0;
     }
 
     file = fopen(filename, "r");
 
-    if (file == NULL) {
+    if (file == NULL)
+    {
         perror(filename);
         return 0;
     }
@@ -138,7 +154,8 @@ int read_input(const char *filename,
     *n = 0;
     *quantum = 0;
 
-    while (fgets(line, sizeof(line), file) != NULL) {
+    while (fgets(line, sizeof(line), file) != NULL)
+    {
         char *content;
         char *fields[NUM_FIELDS];
         int has_newline = strchr(line, '\n') != NULL;
@@ -151,15 +168,18 @@ int read_input(const char *filename,
         content = trim(line);
 
         /* Ignore blank lines and comments. */
-        if (*content == '\0' || *content == '#') {
+        if (*content == '\0' || *content == '#')
+        {
             continue;
         }
 
         /* Detect lines that exceed the buffer size without rejecting EOF. */
-        if (!has_newline) {
+        if (!has_newline)
+        {
             int next_character = fgetc(file);
 
-            if (next_character != EOF) {
+            if (next_character != EOF)
+            {
                 fprintf(stderr,
                         "%s:%d: input line is too long.\n",
                         filename, line_number);
@@ -168,10 +188,12 @@ int read_input(const char *filename,
             }
         }
 
-        if (header_value_count < 2) {
+        if (header_value_count < 2)
+        {
             int header_value;
 
-            if (!parse_integer(content, &header_value)) {
+            if (!parse_integer(content, &header_value))
+            {
                 fprintf(stderr,
                         "%s:%d: expected %s header value.\n",
                         filename, line_number,
@@ -182,9 +204,12 @@ int read_input(const char *filename,
                 return 0;
             }
 
-            if (header_value_count == 0) {
+            if (header_value_count == 0)
+            {
                 expected_count = header_value;
-            } else {
+            }
+            else
+            {
                 *quantum = header_value;
             }
 
@@ -193,10 +218,10 @@ int read_input(const char *filename,
         }
 
         field_count = split_fields(
-            content, fields, NUM_FIELDS
-        );
+            content, fields, NUM_FIELDS);
 
-        if (field_count != NUM_FIELDS) {
+        if (field_count != NUM_FIELDS)
+        {
             fprintf(stderr,
                     "%s:%d: expected ID,arrival_time,priority,"
                     "service_time,category.\n",
@@ -206,7 +231,8 @@ int read_input(const char *filename,
         }
 
         if (fields[0][0] == '\0' ||
-            strlen(fields[0]) >= sizeof(patients[0].id)) {
+            strlen(fields[0]) >= sizeof(patients[0].id))
+        {
             fprintf(stderr,
                     "%s:%d: invalid or overly long patient ID.\n",
                     filename, line_number);
@@ -214,7 +240,8 @@ int read_input(const char *filename,
             return 0;
         }
 
-        if (count >= MAX_PATIENTS) {
+        if (count >= MAX_PATIENTS)
+        {
             fprintf(stderr,
                     "Error: maximum of %d patients exceeded.\n",
                     MAX_PATIENTS);
@@ -227,7 +254,8 @@ int read_input(const char *filename,
             !parse_integer(fields[3], &service_time) ||
             fields[4][0] == '\0' ||
             strlen(fields[4]) >= sizeof(patients[0].category) ||
-            service_time == 0) {
+            service_time == 0)
+        {
             fprintf(stderr,
                     "%s:%d: arrival_time and priority must be "
                     "non-negative integers; service_time must be "
@@ -257,7 +285,8 @@ int read_input(const char *filename,
         count++;
     }
 
-    if (ferror(file)) {
+    if (ferror(file))
+    {
         fprintf(stderr,
                 "Error: failed while reading %s.\n",
                 filename);
@@ -267,12 +296,14 @@ int read_input(const char *filename,
 
     fclose(file);
 
-    if (count == 0 || expected_count == 0) {
+    if (count == 0 || expected_count == 0)
+    {
         fprintf(stderr, "Error: input file contains no patients.\n");
         return 0;
     }
 
-    if (expected_count != count) {
+    if (expected_count != count)
+    {
         fprintf(stderr,
                 "%s: header declares %d patients, but %d were read.\n",
                 filename, expected_count, count);
@@ -283,34 +314,87 @@ int read_input(const char *filename,
     return 1;
 }
 
+/* Orders patients by ID (lexicographic), as specifiied for the output. */
+static int compare_by_id(const void *a, const void *b)
+{
+    const Patient *pa = a;
+    const Patient *pb = b;
+
+    return strcmp(pa->id, pb->id);
+}
+
 void print_results(Patient patients[], int n)
 {
-    printf("id,arrival_time,priority,service_time,category,"
-           "first_start_time,completion_time,"
-           "turnaround_time,waiting_time,response_time\n");
-
-    for (int i = 0; i < n; i++) {
-        int turnaround =
-            patients[i].completion_time -
-            patients[i].arrival_time;
-
-        int waiting =
-            turnaround - patients[i].service_time;
-
-        int response =
-            patients[i].first_start_time -
-            patients[i].arrival_time;
-
-        printf("%s,%d,%d,%d,%s,%d,%d,%d,%d,%d\n",
-               patients[i].id,
-               patients[i].arrival_time,
-               patients[i].priority,
-               patients[i].service_time,
-               patients[i].category,
-               patients[i].first_start_time,
-               patients[i].completion_time,
-               turnaround,
-               waiting,
-               response);
+    if (n <= 0)
+    {
+        return;
     }
+
+    /* Sort a copy so the caller's array keeps its order. */
+    Patient *sorted = malloc((size_t)n * sizeof(Patient));
+
+    if (sorted == NULL)
+    {
+        fprintf(stderr, "Error: out of memory while printing results.\n");
+        return;
+    }
+
+    memcpy(sorted, patients, (size_t)n * sizeof(Patient));
+    qsort(sorted, (size_t)n, sizeof(Patient), compare_by_id);
+
+    double total_waiting = 0.0;
+    double total_turnaround = 0.0;
+    double total_response = 0.0;
+    double busy_time = 0.0;
+    int first_arrival = sorted[0].arrival_time;
+    int last_completion = sorted[0].completion_time;
+
+    printf("PROCESS_ID,ARRIVAL,PRIORITY,SERVICE,START,COMPLETION,"
+           "WAITING,TURNAROUND,RESPONSE\n");
+
+    for (int i = 0; i < n; i++)
+    {
+        int turnaround = sorted[i].completion_time - sorted[i].arrival_time;
+        int waiting = turnaround - sorted[i].service_time;
+        int response = sorted[i].first_start_time - sorted[i].arrival_time;
+
+        printf("%s,%d,%d,%d,%d,%d,%d,%d,%d\n",
+               sorted[i].id,
+               sorted[i].arrival_time,
+               sorted[i].priority,
+               sorted[i].service_time,
+               sorted[i].first_start_time,
+               sorted[i].completion_time,
+               waiting,
+               turnaround,
+               response);
+
+        total_waiting += waiting;
+        total_turnaround += turnaround;
+        total_response += response;
+        busy_time += sorted[i].service_time;
+
+        if (sorted[i].arrival_time < first_arrival)
+        {
+            first_arrival = sorted[i].arrival_time;
+        }
+        if (sorted[i].completion_time > last_completion)
+        {
+            last_completion = sorted[i].completion_time;
+        }
+    }
+
+    double elapsed = (double)(last_completion - first_arrival);
+    double throughput = elapsed > 0 ? n / elapsed : 0.0;
+    double utilization =
+        elapsed > 0 ? busy_time / (NUM_DOCTORS * elapsed) * 100.0 : 0.0;
+
+    printf("SUMMARY\n");
+    printf("AVERAGE_WAITING,%.2f\n", total_waiting / n);
+    printf("AVERAGE_TURNAROUND,%.2f\n", total_turnaround / n);
+    printf("AVERAGE_RESPONSE,%.2f\n", total_response / n);
+    printf("THROUGHPUT,%.4f\n", throughput);
+    printf("UTILIZATION,%.2f\n", utilization);
+
+    free(sorted);
 }
