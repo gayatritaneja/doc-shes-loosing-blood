@@ -1,0 +1,6 @@
+4
+2
+P1,0,3,4,Minor
+P2,0,1,6,Critical
+P3,0,2,3,Fracture
+P4,0,1,2,Severe

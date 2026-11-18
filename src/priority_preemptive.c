@@ -154,6 +154,7 @@ int simulate_priority_preemptive(Patient patients[], int n) {
     qsort(patients, n, sizeof(Patient), compare_arrivals);
     PriorityQueue ready;
     init_queue(&ready);
+    stats_reset();
 
     Patient *running[NUM_DOCTORS] = {NULL};
 
@@ -183,6 +184,8 @@ int simulate_priority_preemptive(Patient patients[], int n) {
         for (int d = 0; d < NUM_DOCTORS; d++) {
             if (running[d] != NULL) {
                 running[d]->remaining_time -= elapsed;
+                stats_note_run(d, running[d]->id,
+                               current_time, current_time + elapsed);
             }
         }
 
@@ -211,10 +214,14 @@ int simulate_priority_preemptive(Patient patients[], int n) {
             next_arrival++;
         }
 
+        /* Instrumentation: READY queue length before doctors are filled. */
+        stats_note_queue_len(ready.size);
+
         /* Give idle doctors the highest-priority ready patients. */
         for (int d = 0; d < NUM_DOCTORS; d++) {
             if (running[d] == NULL && !is_empty(&ready)) {
                 running[d] = pop(&ready);
+                stats_note_dispatch();
 
                 if (running[d]->first_start_time == -1) {
                     running[d]->first_start_time = current_time;
@@ -246,6 +253,8 @@ int simulate_priority_preemptive(Patient patients[], int n) {
             }
 
             running[victim] = pop(&ready);
+            stats_note_preemption();
+            stats_note_dispatch();
 
             if (running[victim]->first_start_time == -1) {
                 running[victim]->first_start_time = current_time;

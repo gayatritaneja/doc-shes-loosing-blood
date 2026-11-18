@@ -1,0 +1,6 @@
+4
+2
+P1,0,3,6,Minor
+P2,0,2,6,Fever
+P3,2,1,3,Critical
+P4,2,1,2,Critical

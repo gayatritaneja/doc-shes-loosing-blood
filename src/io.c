@@ -240,6 +240,19 @@ int read_input(const char *filename,
             return 0;
         }
 
+        /* Spec Section 12.2: process IDs are unique within a file. */
+        for (int j = 0; j < count; j++)
+        {
+            if (strcmp(patients[j].id, fields[0]) == 0)
+            {
+                fprintf(stderr,
+                        "%s:%d: duplicate patient ID %s.\n",
+                        filename, line_number, fields[0]);
+                fclose(file);
+                return 0;
+            }
+        }
+
         if (count >= MAX_PATIENTS)
         {
             fprintf(stderr,
@@ -323,6 +336,48 @@ static int compare_by_id(const void *a, const void *b)
     return strcmp(pa->id, pb->id);
 }
 
+/* Averages, throughput and utilization exactly as in spec Section 10. */
+void compute_summary(const Patient patients[], int n, Summary *out)
+{
+    double total_waiting = 0.0;
+    double total_turnaround = 0.0;
+    double total_response = 0.0;
+    double busy_time = 0.0;
+    int first_arrival = patients[0].arrival_time;
+    int last_completion = patients[0].completion_time;
+
+    for (int i = 0; i < n; i++)
+    {
+        int turnaround = patients[i].completion_time - patients[i].arrival_time;
+
+        total_turnaround += turnaround;
+        total_waiting += turnaround - patients[i].service_time;
+        total_response +=
+            patients[i].first_start_time - patients[i].arrival_time;
+        busy_time += patients[i].service_time;
+
+        if (patients[i].arrival_time < first_arrival)
+        {
+            first_arrival = patients[i].arrival_time;
+        }
+        if (patients[i].completion_time > last_completion)
+        {
+            last_completion = patients[i].completion_time;
+        }
+    }
+
+    double elapsed = (double)(last_completion - first_arrival);
+
+    out->avg_waiting = total_waiting / n;
+    out->avg_turnaround = total_turnaround / n;
+    out->avg_response = total_response / n;
+    out->throughput = elapsed > 0 ? n / elapsed : 0.0;
+    out->utilization =
+        elapsed > 0 ? busy_time / (NUM_DOCTORS * elapsed) * 100.0 : 0.0;
+    out->first_arrival = first_arrival;
+    out->last_completion = last_completion;
+}
+
 void print_results(Patient patients[], int n)
 {
     if (n <= 0)
@@ -341,13 +396,6 @@ void print_results(Patient patients[], int n)
 
     memcpy(sorted, patients, (size_t)n * sizeof(Patient));
     qsort(sorted, (size_t)n, sizeof(Patient), compare_by_id);
-
-    double total_waiting = 0.0;
-    double total_turnaround = 0.0;
-    double total_response = 0.0;
-    double busy_time = 0.0;
-    int first_arrival = sorted[0].arrival_time;
-    int last_completion = sorted[0].completion_time;
 
     printf("PROCESS_ID,ARRIVAL,PRIORITY,SERVICE,START,COMPLETION,"
            "WAITING,TURNAROUND,RESPONSE\n");
@@ -368,33 +416,17 @@ void print_results(Patient patients[], int n)
                waiting,
                turnaround,
                response);
-
-        total_waiting += waiting;
-        total_turnaround += turnaround;
-        total_response += response;
-        busy_time += sorted[i].service_time;
-
-        if (sorted[i].arrival_time < first_arrival)
-        {
-            first_arrival = sorted[i].arrival_time;
-        }
-        if (sorted[i].completion_time > last_completion)
-        {
-            last_completion = sorted[i].completion_time;
-        }
     }
 
-    double elapsed = (double)(last_completion - first_arrival);
-    double throughput = elapsed > 0 ? n / elapsed : 0.0;
-    double utilization =
-        elapsed > 0 ? busy_time / (NUM_DOCTORS * elapsed) * 100.0 : 0.0;
+    Summary sum;
+    compute_summary(sorted, n, &sum);
 
     printf("SUMMARY\n");
-    printf("AVERAGE_WAITING,%.2f\n", total_waiting / n);
-    printf("AVERAGE_TURNAROUND,%.2f\n", total_turnaround / n);
-    printf("AVERAGE_RESPONSE,%.2f\n", total_response / n);
-    printf("THROUGHPUT,%.4f\n", throughput);
-    printf("UTILIZATION,%.2f\n", utilization);
+    printf("AVERAGE_WAITING,%.2f\n", sum.avg_waiting);
+    printf("AVERAGE_TURNAROUND,%.2f\n", sum.avg_turnaround);
+    printf("AVERAGE_RESPONSE,%.2f\n", sum.avg_response);
+    printf("THROUGHPUT,%.4f\n", sum.throughput);
+    printf("UTILIZATION,%.2f\n", sum.utilization);
 
     free(sorted);
 }

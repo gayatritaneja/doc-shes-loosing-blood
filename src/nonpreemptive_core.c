@@ -14,6 +14,7 @@ int run_nonpreemptive(Patient patients[], int n, BetterFn better)
     if (n < 0 || n > MAX_PATIENTS) {
         return 1;
     }
+    stats_reset();
     for (int i = 0; i < n; i++) {
         patients[i].remaining_time = patients[i].service_time;
         patients[i].first_start_time = -1;
@@ -33,11 +34,13 @@ int run_nonpreemptive(Patient patients[], int n, BetterFn better)
         /* Choose the best patient that has already arrived by time t. */
         int best = -1;
         int next_arrival = -1;
+        int waiting = 0;                 /* arrived but not yet started */
         for (int i = 0; i < n; i++) {
             if (scheduled[i]) {
                 continue;
             }
             if (patients[i].arrival_time <= t) {
+                waiting++;
                 if (best < 0 || better(&patients[i], &patients[best])) {
                     best = i;
                 }
@@ -51,6 +54,12 @@ int run_nonpreemptive(Patient patients[], int n, BetterFn better)
             free_at[d] = next_arrival;   /* idle until someone arrives */
             continue;
         }
+
+        /* Instrumentation: queue length just before this dispatch. */
+        stats_note_queue_len(waiting);
+        stats_note_dispatch();
+        stats_note_run(d, patients[best].id, t,
+                       t + patients[best].service_time);
 
         patients[best].first_start_time = t;
         patients[best].completion_time = t + patients[best].service_time;
