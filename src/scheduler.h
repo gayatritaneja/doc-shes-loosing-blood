@@ -103,6 +103,7 @@ typedef struct Patient
     PatientResourcePlan resource_plan;
     ProcessState state;
     int mem_wait_logged;   /* 1 once the trace said it is waiting for memory */
+    int placed_at;         /* first slot it was given (-1 = not yet)      */
 } Patient;
 
 /* Shared input/output functions, to be implemented in a separate module. */
@@ -131,6 +132,9 @@ int memory_allocate(MemoryManager *manager, Patient *patient, int start,
 int memory_deallocate(MemoryManager *manager, Patient *patient);
 int memory_external_fragmentation(const MemoryManager *manager);
 int memory_occupied_slots(const MemoryManager *manager);
+/* --memmap: print which patient is in which slot, every time it changes */
+void memory_map_enable(int on);
+void memory_print_map(const MemoryManager *manager, int now);
 void memory_admission_init(MemoryAdmissionQueue *queue);
 int memory_admission_enqueue(MemoryAdmissionQueue *queue, Patient *patient);
 Patient *memory_admission_front(MemoryAdmissionQueue *queue);
@@ -170,6 +174,22 @@ typedef struct
 } Summary;
 
 void compute_summary(const Patient patients[], int n, Summary *out);
+
+/* a2 memory numbers for one run (a2_report.c) */
+typedef struct
+{
+    double avg_memory_wait;
+    int blocked_for_memory;      /* didn't get memory right when they came */
+    double utilization_pct;
+    int peak_occupied;
+    int max_external_fragmentation;
+} MemorySummary;
+
+void compute_memory_summary(const Patient patients[], int n,
+                            const Summary *sum, MemorySummary *out);
+
+/* a2 output format: PROCESS (13 fields), SUMMARY, POOL (a2_report.c) */
+void print_a2_results(Patient patients[], int n);
 
 /* ------------------------------------------------------------------ */
 /* Algorithm table entry (used by main.c and compare.c).               */
@@ -237,6 +257,11 @@ void rsim_set_unsafe(int on);
 int rsim_is_unsafe(void);
 /* prints the deadlock loop that was found */
 void print_deadlock_report(FILE *out);
+
+/* COMPARE_MEMORY mode (compare.c): every scheduler x every allocator */
+int run_compare_memory(const Patient original[], int n,
+                       const AlgorithmEntry algorithms[], size_t count,
+                       int csv);
 
 /* COMPARE mode (compare.c): run every algorithm on one input. */
 int run_compare(const Patient original[], int n,

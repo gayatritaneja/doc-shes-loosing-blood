@@ -64,17 +64,13 @@ void print_final_results(Patient patients[], int n)
     printf("SUMMARY,COMPLETED_COUNT,%d\n", completed);
     printf("SUMMARY,BLOCKED_FOR_MEMORY_COUNT,%d\n", blocked_for_memory);
 
-    /* POOL line. memory utilization = (slots used x time) divided by
-     * (6 slots x total time), same total time as service utilization */
-    double span = (double)(sum.last_completion - sum.first_arrival);
-    double memory_util = span > 0
-        ? 100.0 * (double)g_memory_report.occupied_slot_time /
-              (MEMORY_SLOT_COUNT * span)
-        : 0.0;
+    /* POOL line, same numbers as the a2 output (a2_report.c) */
+    MemorySummary mem;
 
+    compute_memory_summary(sorted, n, &sum, &mem);
     printf("POOL,SPACE,%d,%d,%.4f,%d\n", MEMORY_SLOT_COUNT,
-           g_memory_report.peak_occupied, memory_util,
-           g_memory_report.max_external_fragmentation);
+           mem.peak_occupied, mem.utilization_pct,
+           mem.max_external_fragmentation);
 
     for (int i = 0; i < g_resource_report.count; i++) {
         const ResourceReportRow *r = &g_resource_report.rows[i];

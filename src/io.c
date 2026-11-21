@@ -335,6 +335,15 @@ int read_input(const char *filename,
             }
             else
             {
+                /* a2 spec: Q is a positive number (even without RR) */
+                if (header_value < 1)
+                {
+                    fprintf(stderr,
+                            "%s:%d: quantum Q must be a positive number.\n",
+                            filename, line_number);
+                    fclose(file);
+                    return 0;
+                }
                 *quantum = header_value;
             }
 
@@ -367,7 +376,9 @@ int read_input(const char *filename,
             return 0;
         }
 
+        /* a2 spec: ids can't be empty or have spaces in them */
         if (fields[0][0] == '\0' ||
+            strpbrk(fields[0], " \t") != NULL ||
             strlen(fields[0]) >= sizeof(patients[0].id))
         {
             fprintf(stderr,
@@ -426,14 +437,14 @@ int read_input(const char *filename,
             fields[4][0] == '\0' ||
             strlen(fields[4]) >= sizeof(patients[0].category) ||
             service_time == 0 ||
+            priority < 1 ||
             memory_requirement < 1 ||
             memory_requirement > MEMORY_SLOT_COUNT)
         {
             fprintf(stderr,
-                    "%s:%d: arrival_time and priority must be "
-                    "non-negative integers; service_time must be "
-                    "positive and category must not be empty or "
-                    "overly long.\n",
+                    "%s:%d: ARRIVAL must be 0 or more, PRIORITY and "
+                    "SERVICE must be positive, SPACE_REQ must be 1-6 "
+                    "and CATEGORY must not be empty or overly long.\n",
                     filename, line_number);
             fclose(file);
             return 0;

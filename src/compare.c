@@ -177,3 +177,130 @@ int run_compare(const Patient original[], int n,
     free(rows);
     return ok ? 0 : 1;
 }
+
+/* ---------------------------------------------------------------- */
+/* COMPARE_MEMORY: run every scheduler with every memory algorithm    */
+/* (3 x 3 = 9 runs for the hospital) on the same input                */
+/* ---------------------------------------------------------------- */
+
+static const char *allocator_names[] = {"FIRST_FIT", "BEST_FIT", "WORST_FIT"};
+static const MemoryAllocationAlgorithm allocators[] = {
+    MEMORY_FIRST_FIT, MEMORY_BEST_FIT, MEMORY_WORST_FIT
+};
+
+/* sort by who finished first (ties: smaller id) */
+static int by_completion(const void *a, const void *b)
+{
+    const Patient *x = *(const Patient *const *)a;
+    const Patient *y = *(const Patient *const *)b;
+
+    if (x->completion_time != y->completion_time) {
+        return x->completion_time - y->completion_time;
+    }
+    return strcmp(x->id, y->id);
+}
+
+static int by_id_ptr(const void *a, const void *b)
+{
+    return strcmp((*(const Patient *const *)a)->id,
+                  (*(const Patient *const *)b)->id);
+}
+
+/* "P1 P3 P2 ..." in the order they finished, or "P1@0 P2@3" placements */
+static void describe(Patient *work, int n, int placements, char *out,
+                     size_t size)
+{
+    Patient **list = malloc((size_t)n * sizeof(Patient *));
+
+    out[0] = '\0';
+    if (list == NULL) {
+        return;
+    }
+    for (int i = 0; i < n; i++) {
+        list[i] = &work[i];
+    }
+    qsort(list, (size_t)n, sizeof(Patient *),
+          placements ? by_id_ptr : by_completion);
+    for (int i = 0; i < n; i++) {
+        size_t used = strlen(out);
+
+        if (placements) {
+            snprintf(out + used, size - used, "%s%s@%d", i ? " " : "",
+                     list[i]->id, list[i]->placed_at);
+        } else {
+            snprintf(out + used, size - used, "%s%s", i ? " " : "",
+                     list[i]->id);
+        }
+    }
+    free(list);
+}
+
+int run_compare_memory(const Patient original[], int n,
+                       const AlgorithmEntry algorithms[], size_t count,
+                       int csv)
+{
+    MemoryAllocationAlgorithm saved = memory_get_allocation_algorithm();
+    Patient *work = malloc((size_t)n * sizeof(Patient));
+    char order[4096];
+    char placed[4096];
+
+    if (work == NULL) {
+        return 1;
+    }
+
+    if (csv) {
+        printf("scheduler,allocator,avg_waiting,avg_turnaround,"
+               "avg_response,throughput,service_util,avg_memory_wait,"
+               "blocked_for_memory,memory_util,peak_occupied,"
+               "max_ext_frag,completion_order,placement\n");
+    } else {
+        printf("%-20s %-10s %8s %8s %8s %10s %8s %8s %8s %8s %5s %5s\n",
+               "Scheduler", "Allocator", "AvgWait", "AvgTAT", "AvgResp",
+               "Throughput", "Util%", "AvgMemW", "MemBlk", "MemUtil%",
+               "Peak", "Fext");
+    }
+
+    for (size_t a = 0; a < count; a++) {
+        for (int m = 0; m < 3; m++) {
+            Summary sum;
+            MemorySummary mem;
+
+            memcpy(work, original, (size_t)n * sizeof(Patient));
+            memory_set_allocation_algorithm(allocators[m]);
+            if (algorithms[a].run(work, n) != 0) {
+                free(work);
+                memory_set_allocation_algorithm(saved);
+                return 1;
+            }
+            compute_summary(work, n, &sum);
+            compute_memory_summary(work, n, &sum, &mem);
+            describe(work, n, 0, order, sizeof(order));
+            describe(work, n, 1, placed, sizeof(placed));
+
+            if (csv) {
+                printf("%s,%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%.4f,%d,%d,"
+                       "%s,%s\n",
+                       algorithms[a].name, allocator_names[m],
+                       sum.avg_waiting, sum.avg_turnaround, sum.avg_response,
+                       sum.throughput, sum.utilization, mem.avg_memory_wait,
+                       mem.blocked_for_memory, mem.utilization_pct,
+                       mem.peak_occupied, mem.max_external_fragmentation,
+                       order, placed);
+            } else {
+                printf("%-20s %-10s %8.2f %8.2f %8.2f %10.4f %8.2f %8.2f "
+                       "%8d %8.2f %5d %5d\n",
+                       algorithms[a].name, allocator_names[m],
+                       sum.avg_waiting, sum.avg_turnaround, sum.avg_response,
+                       sum.throughput, sum.utilization, mem.avg_memory_wait,
+                       mem.blocked_for_memory, mem.utilization_pct,
+                       mem.peak_occupied, mem.max_external_fragmentation);
+                printf("%31s finish order: %s\n", "", order);
+                printf("%31s placement:    %s\n", "", placed);
+            }
+        }
+    }
+
+    memory_set_allocation_algorithm(saved);
+    free(work);
+    return 0;
+}

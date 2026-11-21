@@ -141,6 +141,49 @@ else
     bad "--unsafe deadlock demo (exit $status)"
 fi
 
+# 9. assignment 2: every scheduler x every allocator, using the a2 command
+#    INPUT SCHEDULER ALLOCATOR OUTPUT_FILE. the file must match the expected
+#    a2 output and nothing may be printed to stdout.
+EXPORT="$(mktemp)"
+for input in tests/a2/*.txt; do
+    name=$(basename "$input" .txt)
+    for algo in $ALGOS; do
+        for fit in FIRST_FIT BEST_FIT WORST_FIT; do
+            $RUN "$BIN" "$input" "$algo" "$fit" "$EXPORT" > "$OUT" 2>/dev/null
+            if [ $? -eq 0 ] && [ ! -s "$OUT" ] &&
+               diff -q "$EXPORT" "tests/a2/expected/${name}_${algo}_${fit}.out" \
+                   > /dev/null; then
+                ok
+            else
+                bad "a2 $name $algo $fit"
+            fi
+        done
+    done
+done
+rm -f "$EXPORT"
+
+# 10. a2 command without an output file prints the same thing to stdout
+$RUN "$BIN" tests/a2/hospital_mix.txt PRIORITY BEST_FIT > "$OUT" 2>/dev/null
+if diff -q "$OUT" tests/a2/expected/hospital_mix_PRIORITY_BEST_FIT.out \
+       > /dev/null; then ok; else bad "a2 command to stdout"; fi
+
+# 11. same input + scheduler + allocator gives the same output every time
+$RUN "$BIN" tests/a2/hospital_mix.txt PRIORITY_PREEMPTIVE WORST_FIT > "$OUT"
+same=1
+for i in 1 2 3 4 5; do
+    $RUN "$BIN" tests/a2/hospital_mix.txt PRIORITY_PREEMPTIVE WORST_FIT |
+        diff -q - "$OUT" > /dev/null || same=0
+done
+if [ $same -eq 1 ]; then ok; else bad "a2 output changes between runs"; fi
+
+# 12. COMPARE_MEMORY_CSV: header + 9 rows (3 schedulers x 3 allocators)
+rows=$("$BIN" tests/a2/hospital_mix.txt COMPARE_MEMORY_CSV 2>/dev/null | wc -l)
+if [ "$rows" -eq 10 ]; then ok; else bad "COMPARE_MEMORY_CSV produced $rows lines"; fi
+
+# 13. unknown allocator name is an error
+"$BIN" tests/a2/hospital_mix.txt FCFS NEXT_FIT > /dev/null 2>&1 \
+    && bad "unknown allocator accepted" || ok
+
 rm -f "$OUT"
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

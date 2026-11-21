@@ -162,6 +162,7 @@ int memory_allocate(MemoryManager *manager, Patient *patient, int start,
     }
 
     patient->memory_start = start;
+    patient->placed_at = start;
     patient->memory_slots = patient->memory_requirement;
     patient->memory_admission_time = allocation_time;
     if (memory_occupied_slots(manager) > manager->peak_occupied) {
@@ -276,4 +277,47 @@ void memory_process_admission(MemoryManager *manager,
         patient->state = PROCESS_READY;
         memory_admission_dequeue(queue);
     }
+}
+
+/* ---------------------------------------------------------------- */
+/* --memmap: a picture of the 6 slots over time (printed to stderr)   */
+/* ---------------------------------------------------------------- */
+
+static int memory_map_on = 0;
+static char last_map[MEMORY_SLOT_COUNT * (MAX_ID_LENGTH + 1) + 1];
+
+void memory_map_enable(int on)
+{
+    memory_map_on = on;
+    last_map[0] = '\0';
+}
+
+/* prints one row, but only if the slots look different from last time */
+void memory_print_map(const MemoryManager *manager, int now)
+{
+    char row[sizeof(last_map)];
+
+    if (!memory_map_on) {
+        return;
+    }
+
+    row[0] = '\0';
+    for (int i = 0; i < MEMORY_SLOT_COUNT; i++) {
+        const char *who = manager->slots[i].free ? "." : manager->slots[i].owner;
+        size_t used = strlen(row);
+
+        snprintf(row + used, sizeof(row) - used, " %-4s", who);
+    }
+
+    if (strcmp(row, last_map) == 0) {
+        return;                       /* nothing moved */
+    }
+    if (last_map[0] == '\0') {
+        fprintf(stderr, "MEMMAP time  | slot 0..5                     | used free fext\n");
+    }
+    strcpy(last_map, row);
+    fprintf(stderr, "MEMMAP t=%-4d|%s | %4d %4d %4d\n", now, row,
+            memory_occupied_slots(manager),
+            MEMORY_SLOT_COUNT - memory_occupied_slots(manager),
+            memory_external_fragmentation(manager));
 }

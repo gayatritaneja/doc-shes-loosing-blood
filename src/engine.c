@@ -176,6 +176,7 @@ int run_event_engine(Patient patients[], int n, BetterFn better,
         patients[i].resource_plan.current_action = 0;
         patients[i].state = PROCESS_NEW;
         patients[i].mem_wait_logged = 0;
+        patients[i].placed_at = -1;
         if (patients[i].memory_requirement <= 0) {
             patients[i].memory_requirement = 1;
         }
@@ -320,6 +321,9 @@ int run_event_engine(Patient patients[], int n, BetterFn better,
                 break;
             }
         }
+
+        /* --memmap: show the slots after everything at this time is done */
+        memory_print_map(&memory, current_time);
 
         if (rs.failed) {
             fprintf(stderr, "Error: resource subsystem failure.\n");
