@@ -366,7 +366,7 @@ input (same as assignment 2, plus two optional parts at the end):
 ```text
 N                                         number of patients
 Q                                         round robin quantum (read but not used, hospital has no RR)
-ID,ARRIVAL,PRIORITY,SERVICE,CATEGORY,SPACE_REQ     one line per patient
+ID,ARRIVAL,PRIORITY,SERVICE,CATEGORY,SPACE_REQ,TABLE_REQ   one line per patient (TABLE_REQ is always 0 for the hospital)
 R                                         number of resources (optional)
 RESOURCE_ID,CAPACITY                      one line per resource
 K                                         number of actions
@@ -612,7 +612,7 @@ see "algorithm comparison" above. for example on `sample_hw`, average response i
 
 ## 11. assumptions and limits
 
-- hospital rows have 6 fields. old 5-field rows get `SPACE_REQ=1`. `Q` is read but not used.
+- rows have 7 fields like the spec says, and TABLE_REQ must be 0 (the hospital has no table pool). older 5-field rows get `SPACE_REQ=1` and 6-field rows still work too. `Q` is read but not used.
 - resource actions take 0 time. a release at the very end of service happens before the patient finishes.
 - if there are no resources and no `--final`, it prints the old a1 table (so the a1 tests still work). use `--final` for the new format.
 - memory utilization is counted over time, from the first arrival to the last finish.

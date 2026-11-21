@@ -8,11 +8,13 @@
 #include "resource_actions.h"
 
 #define INPUT_LINE_SIZE 1024
-#define NUM_FIELDS 6
+#define NUM_FIELDS 7
 
 /*
- * Input format:
- * ID,arrival_time,priority,service_time,category,memory_requirement
+ * Input format (spec, 7 fields):
+ * ID,arrival_time,priority,service_time,category,SPACE_REQ,TABLE_REQ
+ * TABLE_REQ is only used by the restaurant, so for the hospital it must
+ * be 0. the older 5-field (a1) and 6-field rows are still accepted.
  *
  * Example:
  * P001,0,2,5,Emergency,2
@@ -355,11 +357,11 @@ int read_input(const char *filename,
         field_count = split_fields(
             content, fields, NUM_FIELDS);
 
-        if (field_count != 5 && field_count != NUM_FIELDS)
+        if (field_count < 5 || field_count > NUM_FIELDS)
         {
             fprintf(stderr,
                     "%s:%d: expected ID,arrival_time,priority,"
-                    "service_time,category[,memory_requirement].\n",
+                    "service_time,category,SPACE_REQ,TABLE_REQ.\n",
                     filename, line_number);
             fclose(file);
             return 0;
@@ -398,9 +400,24 @@ int read_input(const char *filename,
         }
 
         memory_requirement = 1;
-        if (field_count == NUM_FIELDS &&
+        if (field_count >= 6 &&
             !parse_integer(fields[5], &memory_requirement)) {
             memory_requirement = 0;
+        }
+
+        /* the hospital has no table pool, so TABLE_REQ must be 0 */
+        if (field_count == 7) {
+            int table_requirement = -1;
+
+            if (!parse_integer(fields[6], &table_requirement) ||
+                table_requirement != 0) {
+                fprintf(stderr,
+                        "%s:%d: TABLE_REQ must be 0 for the hospital "
+                        "(there is no table pool).\n",
+                        filename, line_number);
+                fclose(file);
+                return 0;
+            }
         }
 
         if (!parse_integer(fields[1], &arrival) ||
