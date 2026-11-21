@@ -3,19 +3,23 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include "resource_manager.h"
 
 #define MAX_PATIENTS 1000
 #define MAX_ID_LENGTH 32
 #define NUM_DOCTORS 2
 #define MEMORY_SLOT_COUNT 6
 
+
 typedef enum {
     PROCESS_NEW,
     PROCESS_BLOCKED_MEMORY,
     PROCESS_READY,
     PROCESS_RUNNING,
+    PROCESS_BLOCKED_RESOURCE,
     PROCESS_TERMINATED
 } ProcessState;
+
 
 typedef enum {
     MEMORY_FIRST_FIT,
@@ -32,6 +36,26 @@ typedef struct {
     MemorySlot slots[MEMORY_SLOT_COUNT];
     int max_observed_external_fragmentation;
 } MemoryManager;
+
+#define MAX_RESOURCE_ACTIONS 32
+
+typedef enum {
+    RESOURCE_ACTION_ACQUIRE,
+    RESOURCE_ACTION_RELEASE
+} ResourceActionType;
+
+typedef struct {
+    int work_offset;
+    ResourceActionType type;
+    char resource_id[32];
+    int units;
+} ResourceAction;
+
+typedef struct {
+    ResourceAction actions[MAX_RESOURCE_ACTIONS];
+    int count;
+    int current_action;
+} PatientResourcePlan;
 
 typedef struct Patient Patient;
 
@@ -58,6 +82,14 @@ typedef struct Patient
     int memory_slots;
     int memory_admission_time;
     int scheduler_queued;
+        /* Resource blocking and waiting */
+    int resource_wait_time;
+    int resource_block_start;
+    /* While BLOCKED_RESOURCE: everything that must be granted together
+     * (the requested resource first, then any rolled-back holdings). */
+    char pending_set[RESOURCE_SET_MAX][RESOURCE_ID_LENGTH];
+    int pending_count;
+    PatientResourcePlan resource_plan;
     ProcessState state;
 } Patient;
 
@@ -68,6 +100,10 @@ int read_input(const char *filename,
                int *quantum);
 
 void print_results(Patient patients[], int n);
+
+/* Spec 9.2 output with RESOURCE_WAIT, RESOURCE and CHECK records
+ * (resource_report.c). */
+void print_final_results(Patient patients[], int n);
 
 /* Scheduling algorithms (priority_preemptive.c, fcfs.c, priority.c). */
 int simulate_priority_preemptive(Patient patients[], int n);
@@ -93,9 +129,15 @@ void memory_process_admission(MemoryManager *manager,
 void memory_set_allocation_algorithm(MemoryAllocationAlgorithm algorithm);
 MemoryAllocationAlgorithm memory_get_allocation_algorithm(void);
 
+/* `better` returns non-zero if patient a should be served before b. */
+typedef int (*BetterFn)(const Patient *a, const Patient *b);
+
+/* Event-driven engine shared by all three algorithms (engine.c). */
+int run_event_engine(Patient patients[], int n, BetterFn better,
+                     int preemptive);
+
 /* Shared non-preemptive engine (nonpreemptive_core.c). `better` returns
  * non-zero if patient a should be served before patient b. */
-typedef int (*BetterFn)(const Patient *a, const Patient *b);
 int run_nonpreemptive(Patient patients[], int n, BetterFn better);
 
 
@@ -162,6 +204,12 @@ void stats_note_run(int doctor, const char *id, int start, int end);
 
 void print_stats(FILE *out);                 /* preemptions, dispatches ... */
 void print_gantt(FILE *out);                 /* per-doctor timeline (gantt.c) */
+
+/* Bounded deadlock demonstration + prevention (deadlock_demo.c). */
+int run_deadlock_demo(void);
+
+/* Event trace of resource operations on stderr (resource_sim.c). */
+void resource_trace_enable(int on);
 
 /* COMPARE mode (compare.c): run every algorithm on one input. */
 int run_compare(const Patient original[], int n,

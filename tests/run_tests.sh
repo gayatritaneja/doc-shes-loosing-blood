@@ -25,7 +25,7 @@ fi
 ok()  { pass=$((pass + 1)); }
 bad() { fail=$((fail + 1)); echo "FAIL: $1"; }
 
-cc -std=c11 -Wall -Wextra -Wpedantic -Werror src/*.c -o "$BIN" || exit 1
+cc -std=c11 -Wall -Wextra -Wpedantic -Werror -pthread src/*.c -o "$BIN" || exit 1
 
 # 1. valid inputs against hand-checked expected output
 for input in tests/inputs/*.txt; do
@@ -73,6 +73,23 @@ fi
 # 4. comparison mode: header + one row per algorithm
 rows=$("$BIN" tests/inputs/sample_hw.txt COMPARE_CSV 2>/dev/null | wc -l)
 if [ "$rows" -eq 4 ]; then ok; else bad "COMPARE_CSV produced $rows lines"; fi
+
+# 5. concurrency: real workers, deadlock-prone input, bounded demo
+for algo in $ALGOS; do
+    for input in tests/concurrency/*.txt; do
+        $RUN "$BIN" "$input" "$algo" > "$OUT" 2>/dev/null
+        if [ $? -eq 0 ] &&
+           grep -q '^CHECK,EXCLUSIVITY_VIOLATIONS,0$' "$OUT" &&
+           grep -q '^CHECK,UNRESOLVED_DEADLOCKS,0$' "$OUT" &&
+           grep -q "^CHECK,COMPLETED_COUNT,$(grep -c '^PROCESS,' "$OUT")\$" "$OUT"; then
+            ok
+        else
+            bad "concurrency $(basename "$input") $algo"
+        fi
+    done
+done
+$RUN "$BIN" --deadlock-demo > "$OUT" 2>&1 && grep -q '^DEMO PASSED' "$OUT" \
+    && ok || bad "deadlock demo"
 
 rm -f "$OUT"
 echo "$pass passed, $fail failed"

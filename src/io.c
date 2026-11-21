@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "scheduler.h"
+#include "resource_actions.h"
 
 #define INPUT_LINE_SIZE 1024
 #define NUM_FIELDS 6
@@ -124,6 +125,124 @@ static int split_fields(char *line, char *fields[], int capacity)
     return count;
 }
 
+/*
+ * Optional sections after the N process rows (spec Section 8):
+ *   R / R rows "RESOURCE_ID,CAPACITY" / K / K rows
+ *   "ID,WORK_OFFSET,ACTION,RESOURCE_ID,UNITS".
+ * Stages: 0 expect R, 1 resource rows, 2 expect K, 3 action rows, 4 done.
+ */
+typedef struct {
+    int stage;
+    int expected;
+    int seen;
+} ExtraState;
+
+static int extra_error(const char *filename, int line, const char *msg)
+{
+    fprintf(stderr, "%s:%d: %s\n", filename, line, msg);
+    return 0;
+}
+
+static int parse_extra_line(ExtraState *st, char *content,
+                            Patient patients[], int count,
+                            const char *filename, int line)
+{
+    char *fields[5];
+
+    switch (st->stage) {
+    case 0:
+    case 2:
+        if (!parse_integer(content, &st->expected)) {
+            return extra_error(filename, line,
+                st->stage == 0 ? "expected resource count R."
+                               : "expected action count K.");
+        }
+        st->seen = 0;
+        if (st->expected == 0) {
+            st->stage = st->stage == 0 ? 2 : 4;
+        } else {
+            st->stage++;
+        }
+        return 1;
+
+    case 1:
+        if (split_fields(content, fields, 5) != 2) {
+            return extra_error(filename, line,
+                               "expected RESOURCE_ID,CAPACITY.");
+        }
+        {
+            int capacity;
+
+            if (!parse_integer(fields[1], &capacity) || capacity < 1 ||
+                fields[0][0] == '\0' ||
+                resource_config_add(fields[0], capacity) != 0) {
+                return extra_error(filename, line,
+                    "invalid, duplicate or over-long resource, or "
+                    "CAPACITY below 1.");
+            }
+        }
+        if (++st->seen == st->expected) {
+            st->stage = 2;
+        }
+        return 1;
+
+    case 3:
+        if (split_fields(content, fields, 5) != 5) {
+            return extra_error(filename, line,
+                "expected ID,WORK_OFFSET,ACTION,RESOURCE_ID,UNITS.");
+        }
+        {
+            Patient *p = NULL;
+            int offset;
+            int units;
+            ResourceActionType type;
+
+            for (int i = 0; i < count; i++) {
+                if (strcmp(patients[i].id, fields[0]) == 0) {
+                    p = &patients[i];
+                }
+            }
+            if (p == NULL) {
+                return extra_error(filename, line,
+                                   "action refers to an unknown process.");
+            }
+            if (strcmp(fields[2], "ACQUIRE") == 0) {
+                type = RESOURCE_ACTION_ACQUIRE;
+            } else if (strcmp(fields[2], "RELEASE") == 0) {
+                type = RESOURCE_ACTION_RELEASE;
+            } else {
+                return extra_error(filename, line,
+                                   "ACTION must be ACQUIRE or RELEASE.");
+            }
+            if (!resource_config_has(fields[3])) {
+                return extra_error(filename, line,
+                                   "action uses an undeclared resource.");
+            }
+            if (!parse_integer(fields[1], &offset) ||
+                offset > p->service_time) {
+                return extra_error(filename, line,
+                    "WORK_OFFSET must be between 0 and SERVICE.");
+            }
+            if (!parse_integer(fields[4], &units) || units != 1) {
+                return extra_error(filename, line, "UNITS must be 1.");
+            }
+            if (resource_plan_add(&p->resource_plan, offset, type,
+                                  fields[3], units) != 0) {
+                return extra_error(filename, line,
+                    "too many actions, or offsets not in nondecreasing "
+                    "order for this process.");
+            }
+        }
+        if (++st->seen == st->expected) {
+            st->stage = 4;
+        }
+        return 1;
+
+    default:
+        return extra_error(filename, line, "unexpected extra line.");
+    }
+}
+
 int read_input(const char *filename,
                Patient patients[],
                int *n,
@@ -135,6 +254,9 @@ int read_input(const char *filename,
     int line_number = 0;
     int header_value_count = 0;
     int expected_count = -1;
+    ExtraState extra = {0, 0, 0};
+
+    resource_config_reset();
 
     if (filename == NULL || patients == NULL ||
         n == NULL || quantum == NULL)
@@ -215,6 +337,18 @@ int read_input(const char *filename,
             }
 
             header_value_count++;
+            continue;
+        }
+
+        /* All N process rows read: what follows is the R/K sections. */
+        if (count >= expected_count)
+        {
+            if (!parse_extra_line(&extra, content, patients, count,
+                                  filename, line_number))
+            {
+                fclose(file);
+                return 0;
+            }
             continue;
         }
 
@@ -336,6 +470,27 @@ int read_input(const char *filename,
                 "%s: header declares %d patients, but %d were read.\n",
                 filename, expected_count, count);
         return 0;
+    }
+
+    if (extra.stage == 1 || extra.stage == 3 || extra.stage == 2)
+    {
+        fprintf(stderr,
+                "%s: resource/action section is incomplete "
+                "(R and K sections must both be complete).\n", filename);
+        return 0;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        char why[96];
+
+        if (resource_plan_validate(&patients[i].resource_plan,
+                                   why, sizeof(why)) != 0)
+        {
+            fprintf(stderr, "%s: process %s: %s.\n",
+                    filename, patients[i].id, why);
+            return 0;
+        }
     }
 
     *n = count;

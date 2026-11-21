@@ -2,12 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include "scheduler.h"
+#include "resource_actions.h"
 
 /*
  * Smart Hospital CLI entry point.
  *
  * Usage:
- *   ./scheduler INPUT_FILE ALGORITHM [--gantt] [--stats]
+ *   ./scheduler INPUT_FILE ALGORITHM [--gantt] [--stats] [--trace] [--final]
+ *   ./scheduler --deadlock-demo
  *
  * ALGORITHM is one of:
  *   FCFS                 first-come, first-served
@@ -15,6 +17,10 @@
  *   PRIORITY_PREEMPTIVE  preemptive priority
  *   COMPARE              run all three and print a comparison table
  *   COMPARE_CSV          same comparison as CSV (used by analysis/)
+ *
+ * --trace prints the shared-resource event trace (stderr); --final prints
+ * the spec Section 9.2 format (also used whenever the input declares
+ * resources); --deadlock-demo runs the bounded deadlock demonstration.
  *
  * --gantt and --stats print extra information to stderr, so stdout stays
  * in the machine-readable format required by the specification.
@@ -43,16 +49,22 @@ static SchedulerFunction find_algorithm(const char *name)
 static void print_usage(const char *program)
 {
     fprintf(stderr,
-            "Usage: %s INPUT_FILE ALGORITHM [--gantt] [--stats]\n"
+            "Usage: %s INPUT_FILE ALGORITHM [--gantt] [--stats] "
+            "[--trace] [--final]\n"
+            "       %s --deadlock-demo\n"
             "       %s INPUT_FILE ALGORITHM --memory FIRST_FIT|BEST_FIT|WORST_FIT\n"
             "Algorithms: FCFS, PRIORITY, PRIORITY_PREEMPTIVE, "
             "COMPARE, COMPARE_CSV\n",
-            program, program);
+            program, program, program);
 }
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3 || argc > 7) {
+    if (argc == 2 && strcmp(argv[1], "--deadlock-demo") == 0) {
+        return run_deadlock_demo();
+    }
+
+    if (argc < 3 || argc > 9) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
@@ -61,12 +73,17 @@ int main(int argc, char *argv[])
     const char *algorithm_name = argv[2];
     int show_gantt = 0;
     int show_stats = 0;
+    int final_format = 0;
 
     for (int i = 3; i < argc; i++) {
         if (strcmp(argv[i], "--gantt") == 0) {
             show_gantt = 1;
         } else if (strcmp(argv[i], "--stats") == 0) {
             show_stats = 1;
+        } else if (strcmp(argv[i], "--trace") == 0) {
+            resource_trace_enable(1);
+        } else if (strcmp(argv[i], "--final") == 0) {
+            final_format = 1;
         } else if (strcmp(argv[i], "--memory") == 0) {
             i++;
             if (i >= argc) {
@@ -137,7 +154,11 @@ int main(int argc, char *argv[])
         }
     }
 
-    print_results(patients, n);
+    if (final_format || g_resource_config.count > 0) {
+        print_final_results(patients, n);
+    } else {
+        print_results(patients, n);
+    }
 
     if (show_stats) {
         print_stats(stderr);
