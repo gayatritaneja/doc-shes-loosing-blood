@@ -3,12 +3,14 @@
 #include <string.h>
 #include "scheduler.h"
 #include "resource_actions.h"
+#include "resource_sim.h"
 
 /*
  * Smart Hospital CLI entry point.
  *
  * Usage:
  *   ./scheduler INPUT_FILE ALGORITHM [--gantt] [--stats] [--trace] [--final]
+ *               [--memory FIRST_FIT|BEST_FIT|WORST_FIT] [--unsafe]
  *   ./scheduler --deadlock-demo
  *
  * ALGORITHM is one of:
@@ -20,7 +22,9 @@
  *
  * --trace prints the shared-resource event trace (stderr); --final prints
  * the spec Section 9.2 format (also used whenever the input declares
- * resources); --deadlock-demo runs the bounded deadlock demonstration.
+ * resources); --deadlock-demo runs the bounded deadlock demonstration;
+ * --unsafe turns deadlock prevention OFF for a bounded integrated demo
+ * (the run stops with exit code 2 as soon as a wait-for cycle forms).
  *
  * --gantt and --stats print extra information to stderr, so stdout stays
  * in the machine-readable format required by the specification.
@@ -50,7 +54,7 @@ static void print_usage(const char *program)
 {
     fprintf(stderr,
             "Usage: %s INPUT_FILE ALGORITHM [--gantt] [--stats] "
-            "[--trace] [--final]\n"
+            "[--trace] [--final] [--unsafe]\n"
             "       %s --deadlock-demo\n"
             "       %s INPUT_FILE ALGORITHM --memory FIRST_FIT|BEST_FIT|WORST_FIT\n"
             "Algorithms: FCFS, PRIORITY, PRIORITY_PREEMPTIVE, "
@@ -64,7 +68,7 @@ int main(int argc, char *argv[])
         return run_deadlock_demo();
     }
 
-    if (argc < 3 || argc > 9) {
+    if (argc < 3 || argc > 10) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
@@ -82,6 +86,8 @@ int main(int argc, char *argv[])
             show_stats = 1;
         } else if (strcmp(argv[i], "--trace") == 0) {
             resource_trace_enable(1);
+        } else if (strcmp(argv[i], "--unsafe") == 0) {
+            rsim_set_unsafe(1);
         } else if (strcmp(argv[i], "--final") == 0) {
             final_format = 1;
         } else if (strcmp(argv[i], "--memory") == 0) {
@@ -136,7 +142,24 @@ int main(int argc, char *argv[])
                            compare_csv);
     }
 
-    if (scheduler(patients, n) != 0) {
+    int rc = scheduler(patients, n);
+
+    if (rc == ENGINE_DEADLOCK) {
+        /* --unsafe demo: the run stopped as soon as the deadlock
+         * happened. print who waits for whom, then the checks. */
+        fprintf(stderr,
+                "deadlock found (prevention is off because of --unsafe). "
+                "run again without --unsafe to see it prevented.\n");
+        print_deadlock_report(stdout);
+        printf("CHECK,EXCLUSIVITY_VIOLATIONS,%d\n",
+               g_resource_report.exclusivity_violations);
+        printf("CHECK,UNRESOLVED_DEADLOCKS,%d\n",
+               g_resource_report.unresolved_deadlocks);
+        printf("CHECK,COMPLETED_COUNT,%d\n",
+               g_resource_report.completed_count);
+        return ENGINE_DEADLOCK;
+    }
+    if (rc != 0) {
         fprintf(stderr, "Error: scheduling algorithm failed.\n");
         return EXIT_FAILURE;
     }

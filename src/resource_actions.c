@@ -85,6 +85,14 @@ int resource_plan_validate(const PatientResourcePlan *plan,
                          a->resource_id);
                 return -1;
             }
+            /* when a patient gets blocked it asks for everything again
+             * at once, and that list has room for 8, so max 7 held */
+            if (held_count + 1 > RESOURCE_SET_MAX - 1) {
+                snprintf(why, why_size,
+                         "holds more than %d resources at once",
+                         RESOURCE_SET_MAX - 1);
+                return -1;
+            }
             held[held_count++] = a->resource_id;
         } else {
             if (at < 0) {

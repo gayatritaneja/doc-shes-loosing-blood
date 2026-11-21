@@ -23,10 +23,30 @@
 
 ResourceReport g_resource_report;
 static int trace_on = 0;
+static int unsafe_mode = 0;   /* 1 when --unsafe is given (prevention off) */
 
 void resource_trace_enable(int on)
 {
     trace_on = on;
+}
+
+void rsim_set_unsafe(int on)
+{
+    unsafe_mode = on;
+}
+
+int rsim_is_unsafe(void)
+{
+    return unsafe_mode;
+}
+
+/* trace line printed by the coordinator (CO), not by a worker */
+void sim_trace(int now, const char *event, const char *pid, const char *what)
+{
+    if (trace_on) {
+        fprintf(stderr, "TRACE t=%-4d CO %-16s %-6s %s\n",
+                now, event, pid, what);
+    }
 }
 
 static void trace(int now, int worker, const char *event,
@@ -428,6 +448,12 @@ int rsim_process_due(ResourceSim *rs, Patient patients[], int n,
         int held_n = resource_list_held(&rs->manager, p->id, held,
                                         RESOURCE_SET_MAX - 1);
 
+        /* unsafe mode: the patient keeps what it holds while it waits.
+         * this is "hold and wait", and it is what lets a deadlock happen. */
+        if (unsafe_mode) {
+            held_n = 0;
+        }
+
         strcpy(p->pending_set[0], job->task.resource_id);
         for (int k = 0; k < held_n; k++) {
             strcpy(p->pending_set[k + 1], held[k]);
@@ -469,4 +495,119 @@ int rsim_process_due(ResourceSim *rs, Patient patients[], int n,
     }
 
     return progress;
+}
+
+/* ---------------------------------------------------------------- */
+/* deadlock check (used by --unsafe)                                 */
+/* ---------------------------------------------------------------- */
+
+/*
+ * idea: every blocked patient is waiting for one resource, and that
+ * resource has one holder. so "p waits for q" is an arrow p -> q.
+ * if we follow the arrows from p and come back to p, it's a loop,
+ * which means a deadlock (nobody in the loop can ever move).
+ */
+#define MAX_LOOP 64
+
+static struct {
+    int found;
+    int time;
+    int length;
+    char pid[MAX_LOOP][MAX_ID_LENGTH];
+    char wants[MAX_LOOP][RESOURCE_ID_LENGTH];
+    char holder[MAX_LOOP][MAX_ID_LENGTH];
+} loop_info;
+
+/* index of the patient that holds this resource, or -1 if it's free */
+static int holder_of(ResourceSim *rs, Patient patients[], int n,
+                     const char *resource)
+{
+    for (int i = 0; i < n; i++) {
+        char held[RESOURCE_SET_MAX][RESOURCE_ID_LENGTH];
+        int count = resource_list_held(&rs->manager, patients[i].id, held,
+                                       RESOURCE_SET_MAX);
+
+        for (int k = 0; k < count; k++) {
+            if (strcmp(held[k], resource) == 0) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+/* who is patient i waiting for? -1 if it isn't blocked on a resource */
+static int waits_for(ResourceSim *rs, Patient patients[], int n, int i)
+{
+    if (patients[i].state != PROCESS_BLOCKED_RESOURCE) {
+        return -1;
+    }
+    return holder_of(rs, patients, n, patients[i].pending_set[0]);
+}
+
+int rsim_detect_deadlock(ResourceSim *rs, Patient patients[], int n,
+                         int now)
+{
+    if (!rs->active) {
+        return 0;
+    }
+
+    for (int start = 0; start < n; start++) {
+        /* follow the arrows from start, at most n steps */
+        int cur = waits_for(rs, patients, n, start);
+        int steps = 0;
+
+        while (cur != -1 && cur != start && steps < n) {
+            cur = waits_for(rs, patients, n, cur);
+            steps++;
+        }
+        if (cur != start) {
+            continue;              /* no loop through this patient */
+        }
+
+        /* found a loop: walk it once more and save it for the report */
+        memset(&loop_info, 0, sizeof(loop_info));
+        loop_info.found = 1;
+        loop_info.time = now;
+        cur = start;
+        do {
+            int next = waits_for(rs, patients, n, cur);
+            int k = loop_info.length++;
+
+            snprintf(loop_info.pid[k], MAX_ID_LENGTH, "%s", patients[cur].id);
+            snprintf(loop_info.wants[k], RESOURCE_ID_LENGTH, "%s",
+                     patients[cur].pending_set[0]);
+            snprintf(loop_info.holder[k], MAX_ID_LENGTH, "%s",
+                     patients[next].id);
+            sim_trace(now, "DEADLOCK", patients[cur].id,
+                      loop_info.wants[k]);
+            cur = next;
+        } while (cur != start && loop_info.length < MAX_LOOP);
+        return 1;
+    }
+    return 0;
+}
+
+/* if the normal run gets stuck, say who is stuck and on what */
+void rsim_report_blocked(Patient patients[], int n, int now)
+{
+    for (int i = 0; i < n; i++) {
+        if (patients[i].state == PROCESS_BLOCKED_RESOURCE) {
+            fprintf(stderr, "  t=%d: %s is stuck waiting for %s\n",
+                    now, patients[i].id, patients[i].pending_set[0]);
+        }
+    }
+}
+
+/* prints: DEADLOCK,DETECTED_AT,t and one DEADLOCK,WAIT_FOR row per arrow */
+void print_deadlock_report(FILE *out)
+{
+    if (!loop_info.found) {
+        return;
+    }
+    fprintf(out, "DEADLOCK,DETECTED_AT,%d\n", loop_info.time);
+    for (int k = 0; k < loop_info.length; k++) {
+        fprintf(out, "DEADLOCK,WAIT_FOR,%s,%s,%s\n", loop_info.pid[k],
+                loop_info.wants[k], loop_info.holder[k]);
+    }
 }

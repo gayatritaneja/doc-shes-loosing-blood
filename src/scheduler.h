@@ -35,7 +35,18 @@ typedef struct {
 typedef struct {
     MemorySlot slots[MEMORY_SLOT_COUNT];
     int max_observed_external_fragmentation;
+    int peak_occupied;         /* most slots ever used at the same time */
+    long occupied_slot_time;   /* slots used x how long they were used  */
 } MemoryManager;
+
+/* numbers for the POOL line of the output, filled in at the end */
+typedef struct {
+    int peak_occupied;
+    long occupied_slot_time;
+    int max_external_fragmentation;
+} MemoryReport;
+
+extern MemoryReport g_memory_report;
 
 #define MAX_RESOURCE_ACTIONS 32
 
@@ -91,6 +102,7 @@ typedef struct Patient
     int pending_count;
     PatientResourcePlan resource_plan;
     ProcessState state;
+    int mem_wait_logged;   /* 1 once the trace said it is waiting for memory */
 } Patient;
 
 /* Shared input/output functions, to be implemented in a separate module. */
@@ -118,6 +130,7 @@ int memory_allocate(MemoryManager *manager, Patient *patient, int start,
                     int allocation_time);
 int memory_deallocate(MemoryManager *manager, Patient *patient);
 int memory_external_fragmentation(const MemoryManager *manager);
+int memory_occupied_slots(const MemoryManager *manager);
 void memory_admission_init(MemoryAdmissionQueue *queue);
 int memory_admission_enqueue(MemoryAdmissionQueue *queue, Patient *patient);
 Patient *memory_admission_front(MemoryAdmissionQueue *queue);
@@ -210,6 +223,20 @@ int run_deadlock_demo(void);
 
 /* Event trace of resource operations on stderr (resource_sim.c). */
 void resource_trace_enable(int on);
+
+/* trace line for scheduler/memory events (resource_sim.c) */
+void sim_trace(int now, const char *event, const char *pid, const char *what);
+
+/*
+ * --unsafe: deadlock prevention is turned off (only for the demo).
+ * after every event we check for a deadlock, and if there is one we stop
+ * and return ENGINE_DEADLOCK, so the program never hangs.
+ */
+#define ENGINE_DEADLOCK 2
+void rsim_set_unsafe(int on);
+int rsim_is_unsafe(void);
+/* prints the deadlock loop that was found */
+void print_deadlock_report(FILE *out);
 
 /* COMPARE mode (compare.c): run every algorithm on one input. */
 int run_compare(const Patient original[], int n,

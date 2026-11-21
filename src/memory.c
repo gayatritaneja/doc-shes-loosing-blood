@@ -1,7 +1,10 @@
+#include <stdio.h>
 #include <string.h>
 #include "scheduler.h"
 
 #define MEMORY_QUEUE_CAPACITY MAX_PATIENTS
+
+MemoryReport g_memory_report;
 
 static MemoryAllocationAlgorithm selected_allocation_algorithm =
     MEMORY_FIRST_FIT;
@@ -77,6 +80,17 @@ int memory_external_fragmentation(const MemoryManager *manager)
     return free_slots - largest_run;
 }
 
+/* how many of the 6 slots are in use right now */
+int memory_occupied_slots(const MemoryManager *manager)
+{
+    int used = 0;
+
+    for (int i = 0; manager != NULL && i < MEMORY_SLOT_COUNT; i++) {
+        used += !manager->slots[i].free;
+    }
+    return used;
+}
+
 int memory_find_free_run(const MemoryManager *manager, int slots,
                          MemoryAllocationAlgorithm algorithm)
 {
@@ -150,6 +164,9 @@ int memory_allocate(MemoryManager *manager, Patient *patient, int start,
     patient->memory_start = start;
     patient->memory_slots = patient->memory_requirement;
     patient->memory_admission_time = allocation_time;
+    if (memory_occupied_slots(manager) > manager->peak_occupied) {
+        manager->peak_occupied = memory_occupied_slots(manager);
+    }
     update_external_fragmentation(manager);
     return 1;
 }
@@ -234,11 +251,26 @@ void memory_process_admission(MemoryManager *manager,
             manager, patient->memory_requirement, algorithm);
 
         if (start < 0) {
+            /* no hole big enough: the front waits, and so does everyone
+             * behind it (fifo, nobody skips the line) */
+            if (!patient->mem_wait_logged) {
+                sim_trace(current_time, "MEM_WAIT", patient->id,
+                          "no free block big enough");
+                patient->mem_wait_logged = 1;
+            }
             break;
         }
 
         if (!memory_allocate(manager, patient, start, current_time)) {
             break;
+        }
+
+        {
+            char what[64];
+
+            snprintf(what, sizeof(what), "gets slots %d-%d, now READY",
+                     start, start + patient->memory_requirement - 1);
+            sim_trace(current_time, "MEM_ADMIT", patient->id, what);
         }
 
         patient->state = PROCESS_READY;

@@ -175,6 +175,7 @@ int run_event_engine(Patient patients[], int n, BetterFn better,
         patients[i].pending_count = 0;
         patients[i].resource_plan.current_action = 0;
         patients[i].state = PROCESS_NEW;
+        patients[i].mem_wait_logged = 0;
         if (patients[i].memory_requirement <= 0) {
             patients[i].memory_requirement = 1;
         }
@@ -190,14 +191,26 @@ int run_event_engine(Patient patients[], int n, BetterFn better,
                                          running, current_time);
 
         if (event_time == -1) {
+            /* nothing left that can happen. with prevention on this
+             * should never happen, but if it does we say why and stop
+             * instead of hanging. */
+            if (rsim_detect_deadlock(&rs, patients, n, current_time)) {
+                rc = ENGINE_DEADLOCK;
+                break;
+            }
             fprintf(stderr,
                     "Simulation error: no future event; the remaining "
-                    "patients cannot proceed.\n");
+                    "patients cannot proceed (unsatisfiable request):\n");
+            rsim_report_blocked(patients, n, current_time);
             rc = 1;
             break;
         }
 
         int elapsed = event_time - current_time;
+
+        /* for memory utilization: add up slots used x time passed */
+        memory.occupied_slot_time +=
+            (long)memory_occupied_slots(&memory) * elapsed;
 
         for (int d = 0; d < NUM_DOCTORS; d++) {
             if (running[d] != NULL) {
@@ -210,6 +223,8 @@ int run_event_engine(Patient patients[], int n, BetterFn better,
 
         while (next_arrival < n &&
                patients[next_arrival].arrival_time <= current_time) {
+            sim_trace(current_time, "ARRIVE", patients[next_arrival].id,
+                      "joins the memory queue");
             memory_admission_enqueue(&admission, &patients[next_arrival]);
             next_arrival++;
         }
@@ -225,6 +240,8 @@ int run_event_engine(Patient patients[], int n, BetterFn better,
                 if (p != NULL && p->remaining_time == 0 &&
                     p->resource_plan.current_action >=
                         p->resource_plan.count) {
+                    sim_trace(current_time, "COMPLETE", p->id,
+                              "done, frees its memory");
                     p->completion_time = current_time;
                     memory_deallocate(&memory, p);
                     p->state = PROCESS_TERMINATED;
@@ -256,6 +273,8 @@ int run_event_engine(Patient patients[], int n, BetterFn better,
                 if (running[d] == NULL && ready.size > 0) {
                     running[d] = pop(&ready);
                     running[d]->state = PROCESS_RUNNING;
+                    sim_trace(current_time, "DISPATCH", running[d]->id,
+                              d == 0 ? "doctor 1" : "doctor 2");
                     stats_note_dispatch();
                     if (running[d]->first_start_time == -1) {
                         running[d]->first_start_time = current_time;
@@ -284,6 +303,11 @@ int run_event_engine(Patient patients[], int n, BetterFn better,
                 current->scheduler_queued = 1;
                 running[victim] = pop(&ready);
                 running[victim]->state = PROCESS_RUNNING;
+                /* the preempted patient keeps any resources it holds */
+                sim_trace(current_time, "PREEMPT", current->id,
+                          "back to READY, keeps its resources");
+                sim_trace(current_time, "DISPATCH", running[victim]->id,
+                          victim == 0 ? "doctor 1" : "doctor 2");
                 stats_note_preemption();
                 stats_note_dispatch();
                 if (running[victim]->first_start_time == -1) {
@@ -302,9 +326,20 @@ int run_event_engine(Patient patients[], int n, BetterFn better,
             rc = 1;
             break;
         }
+
+        /* --unsafe: if there is a deadlock now, stop here (never hang) */
+        if (rsim_is_unsafe() &&
+            rsim_detect_deadlock(&rs, patients, n, current_time)) {
+            rc = ENGINE_DEADLOCK;
+            break;
+        }
     }
 
 done:;
+    g_memory_report.peak_occupied = memory.peak_occupied;
+    g_memory_report.occupied_slot_time = memory.occupied_slot_time;
+    g_memory_report.max_external_fragmentation =
+        memory.max_observed_external_fragmentation;
     int unresolved = 0;
     for (int i = 0; i < n; i++) {
         if (patients[i].state == PROCESS_BLOCKED_RESOURCE) {

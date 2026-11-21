@@ -1,2 +1,4 @@
 scheduler
 *.pyc
+scheduler.exe
+*.o
