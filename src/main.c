@@ -44,14 +44,15 @@ static void print_usage(const char *program)
 {
     fprintf(stderr,
             "Usage: %s INPUT_FILE ALGORITHM [--gantt] [--stats]\n"
+            "       %s INPUT_FILE ALGORITHM --memory FIRST_FIT|BEST_FIT|WORST_FIT\n"
             "Algorithms: FCFS, PRIORITY, PRIORITY_PREEMPTIVE, "
             "COMPARE, COMPARE_CSV\n",
-            program);
+            program, program);
 }
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3 || argc > 5) {
+    if (argc < 3 || argc > 7) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
@@ -66,6 +67,22 @@ int main(int argc, char *argv[])
             show_gantt = 1;
         } else if (strcmp(argv[i], "--stats") == 0) {
             show_stats = 1;
+        } else if (strcmp(argv[i], "--memory") == 0) {
+            i++;
+            if (i >= argc) {
+                print_usage(argv[0]);
+                return EXIT_FAILURE;
+            }
+            if (strcmp(argv[i], "FIRST_FIT") == 0) {
+                memory_set_allocation_algorithm(MEMORY_FIRST_FIT);
+            } else if (strcmp(argv[i], "BEST_FIT") == 0) {
+                memory_set_allocation_algorithm(MEMORY_BEST_FIT);
+            } else if (strcmp(argv[i], "WORST_FIT") == 0) {
+                memory_set_allocation_algorithm(MEMORY_WORST_FIT);
+            } else {
+                print_usage(argv[0]);
+                return EXIT_FAILURE;
+            }
         } else {
             print_usage(argv[0]);
             return EXIT_FAILURE;

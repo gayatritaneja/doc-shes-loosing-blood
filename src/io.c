@@ -7,15 +7,15 @@
 #include "scheduler.h"
 
 #define INPUT_LINE_SIZE 1024
-#define NUM_FIELDS 5
+#define NUM_FIELDS 6
 
 /*
  * Input format:
- * ID,arrival_time,priority,service_time,category
+ * ID,arrival_time,priority,service_time,category,memory_requirement
  *
  * Example:
- * P001,0,2,5,Emergency
- * P002,1,1,3,Critical
+ * P001,0,2,5,Emergency,2
+ * P002,1,1,3,Critical,1
  *
  * Whitespace-separated input is also supported.
  * Blank lines and lines beginning with # are ignored.
@@ -163,6 +163,7 @@ int read_input(const char *filename,
         int arrival;
         int priority;
         int service_time;
+        int memory_requirement;
 
         line_number++;
         content = trim(line);
@@ -220,11 +221,11 @@ int read_input(const char *filename,
         field_count = split_fields(
             content, fields, NUM_FIELDS);
 
-        if (field_count != NUM_FIELDS)
+        if (field_count != 5 && field_count != NUM_FIELDS)
         {
             fprintf(stderr,
                     "%s:%d: expected ID,arrival_time,priority,"
-                    "service_time,category.\n",
+                    "service_time,category[,memory_requirement].\n",
                     filename, line_number);
             fclose(file);
             return 0;
@@ -262,12 +263,20 @@ int read_input(const char *filename,
             return 0;
         }
 
+        memory_requirement = 1;
+        if (field_count == NUM_FIELDS &&
+            !parse_integer(fields[5], &memory_requirement)) {
+            memory_requirement = 0;
+        }
+
         if (!parse_integer(fields[1], &arrival) ||
             !parse_integer(fields[2], &priority) ||
             !parse_integer(fields[3], &service_time) ||
             fields[4][0] == '\0' ||
             strlen(fields[4]) >= sizeof(patients[0].category) ||
-            service_time == 0)
+            service_time == 0 ||
+            memory_requirement < 1 ||
+            memory_requirement > MEMORY_SLOT_COUNT)
         {
             fprintf(stderr,
                     "%s:%d: arrival_time and priority must be "
@@ -290,6 +299,12 @@ int read_input(const char *filename,
         p->priority = priority;
         p->service_time = service_time;
         p->remaining_time = service_time;
+        p->memory_requirement = memory_requirement;
+        p->memory_start = -1;
+        p->memory_slots = 0;
+        p->memory_admission_time = -1;
+        p->scheduler_queued = 0;
+        p->state = PROCESS_NEW;
 
         /* These values indicate that scheduling has not started. */
         p->first_start_time = -1;

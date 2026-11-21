@@ -69,6 +69,7 @@ static Patient *pop(PriorityQueue *q){
     q-> size--; 
 
     if (q-> size == 0){
+        result->scheduler_queued = 0;
         return result;
     }
     q-> items[0]= q-> items[q-> size];
@@ -90,6 +91,7 @@ static Patient *pop(PriorityQueue *q){
         swap_patients(&q->items[i], &q-> items[best]);
         i = best;
     }
+    result->scheduler_queued = 0;
     return result;
 }
 static int choose_preemption_victim(Patient *running[NUM_DOCTORS]) {
@@ -153,8 +155,23 @@ int simulate_priority_preemptive(Patient patients[], int n) {
     /* Process arrivals chronologically while preserving input records. */
     qsort(patients, n, sizeof(Patient), compare_arrivals);
     PriorityQueue ready;
+    MemoryManager memory;
+    MemoryAdmissionQueue admission;
     init_queue(&ready);
+    memory_manager_init(&memory);
+    memory_admission_init(&admission);
     stats_reset();
+
+    for (int i = 0; i < n; i++) {
+        patients[i].memory_start = -1;
+        patients[i].memory_slots = 0;
+        patients[i].memory_admission_time = -1;
+        patients[i].scheduler_queued = 0;
+        patients[i].state = PROCESS_NEW;
+        if (patients[i].memory_requirement <= 0) {
+            patients[i].memory_requirement = 1;
+        }
+    }
 
     Patient *running[NUM_DOCTORS] = {NULL};
 
@@ -197,21 +214,33 @@ int simulate_priority_preemptive(Patient patients[], int n) {
                 running[d]->remaining_time == 0) {
 
                 running[d]->completion_time = current_time;
+                memory_deallocate(&memory, running[d]);
+                running[d]->state = PROCESS_TERMINATED;
                 running[d] = NULL;
                 completed++;
             }
         }
 
-        /* Admit EVERY patient arriving at this time. */
+        /* Admit every patient arriving at this time in ID order. */
         while (next_arrival < n &&
                patients[next_arrival].arrival_time <= current_time) {
-
-            if (!push(&ready, &patients[next_arrival])) {
-                fprintf(stderr, "Error: ready queue is full.\n");
-                return 1;
-            }
-
+            memory_admission_enqueue(&admission, &patients[next_arrival]);
             next_arrival++;
+        }
+
+        memory_process_admission(&memory, &admission,
+                                 memory_get_allocation_algorithm(),
+                                 current_time);
+
+        for (int i = 0; i < n; i++) {
+            if (patients[i].state == PROCESS_READY &&
+                !patients[i].scheduler_queued) {
+                if (!push(&ready, &patients[i])) {
+                    fprintf(stderr, "Error: ready queue is full.\n");
+                    return 1;
+                }
+                patients[i].scheduler_queued = 1;
+            }
         }
 
         /* Instrumentation: READY queue length before doctors are filled. */
@@ -221,6 +250,7 @@ int simulate_priority_preemptive(Patient patients[], int n) {
         for (int d = 0; d < NUM_DOCTORS; d++) {
             if (running[d] == NULL && !is_empty(&ready)) {
                 running[d] = pop(&ready);
+                running[d]->state = PROCESS_RUNNING;
                 stats_note_dispatch();
 
                 if (running[d]->first_start_time == -1) {
@@ -251,8 +281,10 @@ int simulate_priority_preemptive(Patient patients[], int n) {
                 fprintf(stderr, "Error: ready queue is full.\n");
                 return 1;
             }
-
+            current->state = PROCESS_READY;
+            current->scheduler_queued = 1;
             running[victim] = pop(&ready);
+            running[victim]->state = PROCESS_RUNNING;
             stats_note_preemption();
             stats_note_dispatch();
 

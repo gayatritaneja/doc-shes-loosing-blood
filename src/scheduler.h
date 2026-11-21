@@ -7,8 +7,41 @@
 #define MAX_PATIENTS 1000
 #define MAX_ID_LENGTH 32
 #define NUM_DOCTORS 2
+#define MEMORY_SLOT_COUNT 6
 
-typedef struct
+typedef enum {
+    PROCESS_NEW,
+    PROCESS_BLOCKED_MEMORY,
+    PROCESS_READY,
+    PROCESS_RUNNING,
+    PROCESS_TERMINATED
+} ProcessState;
+
+typedef enum {
+    MEMORY_FIRST_FIT,
+    MEMORY_BEST_FIT,
+    MEMORY_WORST_FIT
+} MemoryAllocationAlgorithm;
+
+typedef struct {
+    int free;
+    char owner[MAX_ID_LENGTH];
+} MemorySlot;
+
+typedef struct {
+    MemorySlot slots[MEMORY_SLOT_COUNT];
+    int max_observed_external_fragmentation;
+} MemoryManager;
+
+typedef struct Patient Patient;
+
+typedef struct {
+    Patient *items[MAX_PATIENTS];
+    int head;
+    int size;
+} MemoryAdmissionQueue;
+
+typedef struct Patient
 {
     char id[MAX_ID_LENGTH];
     char category[MAX_ID_LENGTH];
@@ -20,6 +53,12 @@ typedef struct
 
     int first_start_time;
     int completion_time;
+    int memory_requirement;
+    int memory_start;
+    int memory_slots;
+    int memory_admission_time;
+    int scheduler_queued;
+    ProcessState state;
 } Patient;
 
 /* Shared input/output functions, to be implemented in a separate module. */
@@ -34,6 +73,25 @@ void print_results(Patient patients[], int n);
 int simulate_priority_preemptive(Patient patients[], int n);
 int simulate_fcfs(Patient patients[], int n);
 int simulate_priority_nonpreemptive(Patient patients[], int n);
+
+/* Memory management and admission. */
+void memory_manager_init(MemoryManager *manager);
+int memory_find_free_run(const MemoryManager *manager, int slots,
+                         MemoryAllocationAlgorithm algorithm);
+int memory_allocate(MemoryManager *manager, Patient *patient, int start,
+                    int allocation_time);
+int memory_deallocate(MemoryManager *manager, Patient *patient);
+int memory_external_fragmentation(const MemoryManager *manager);
+void memory_admission_init(MemoryAdmissionQueue *queue);
+int memory_admission_enqueue(MemoryAdmissionQueue *queue, Patient *patient);
+Patient *memory_admission_front(MemoryAdmissionQueue *queue);
+void memory_admission_dequeue(MemoryAdmissionQueue *queue);
+void memory_process_admission(MemoryManager *manager,
+                              MemoryAdmissionQueue *queue,
+                              MemoryAllocationAlgorithm algorithm,
+                              int current_time);
+void memory_set_allocation_algorithm(MemoryAllocationAlgorithm algorithm);
+MemoryAllocationAlgorithm memory_get_allocation_algorithm(void);
 
 /* Shared non-preemptive engine (nonpreemptive_core.c). `better` returns
  * non-zero if patient a should be served before patient b. */
