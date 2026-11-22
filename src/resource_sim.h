@@ -63,4 +63,11 @@ int rsim_next_action_time(const Patient *p, int now);
 int rsim_process_due(ResourceSim *rs, Patient patients[], int n,
                      Patient *running[NUM_DOCTORS], int now);
 
+/* returns 1 if blocked patients are waiting on each other in a loop */
+int rsim_detect_deadlock(ResourceSim *rs, Patient patients[], int n,
+                         int now);
+
+/* prints every blocked patient and what it waits for (stderr) */
+void rsim_report_blocked(Patient patients[], int n, int now);
+
 #endif

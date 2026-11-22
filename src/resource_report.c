@@ -5,8 +5,8 @@
 
 /*
  * Spec Section 9.2 output: PROCESS rows with MEM_WAIT / READY_WAIT /
- * RESOURCE_WAIT, SUMMARY, then RESOURCE and CHECK records.
- * (The A2 POOL record is not produced here.)
+ * RESOURCE_WAIT, SUMMARY, POOL (A2 memory metrics), then RESOURCE and
+ * CHECK records.
  */
 
 static int compare_by_id(const void *a, const void *b)
@@ -63,6 +63,14 @@ void print_final_results(Patient patients[], int n)
     printf("SUMMARY,AVERAGE_MEMORY_WAIT,%.4f\n", memory_wait_total / n);
     printf("SUMMARY,COMPLETED_COUNT,%d\n", completed);
     printf("SUMMARY,BLOCKED_FOR_MEMORY_COUNT,%d\n", blocked_for_memory);
+
+    /* POOL line, same numbers as the a2 output (a2_report.c) */
+    MemorySummary mem;
+
+    compute_memory_summary(sorted, n, &sum, &mem);
+    printf("POOL,SPACE,%d,%d,%.4f,%d\n", MEMORY_SLOT_COUNT,
+           mem.peak_occupied, mem.utilization_pct,
+           mem.max_external_fragmentation);
 
     for (int i = 0; i < g_resource_report.count; i++) {
         const ResourceReportRow *r = &g_resource_report.rows[i];

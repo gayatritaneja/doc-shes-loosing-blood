@@ -1,7 +1,10 @@
+#include <stdio.h>
 #include <string.h>
 #include "scheduler.h"
 
 #define MEMORY_QUEUE_CAPACITY MAX_PATIENTS
+
+MemoryReport g_memory_report;
 
 static MemoryAllocationAlgorithm selected_allocation_algorithm =
     MEMORY_FIRST_FIT;
@@ -77,6 +80,17 @@ int memory_external_fragmentation(const MemoryManager *manager)
     return free_slots - largest_run;
 }
 
+/* how many of the 6 slots are in use right now */
+int memory_occupied_slots(const MemoryManager *manager)
+{
+    int used = 0;
+
+    for (int i = 0; manager != NULL && i < MEMORY_SLOT_COUNT; i++) {
+        used += !manager->slots[i].free;
+    }
+    return used;
+}
+
 int memory_find_free_run(const MemoryManager *manager, int slots,
                          MemoryAllocationAlgorithm algorithm)
 {
@@ -148,8 +162,12 @@ int memory_allocate(MemoryManager *manager, Patient *patient, int start,
     }
 
     patient->memory_start = start;
+    patient->placed_at = start;
     patient->memory_slots = patient->memory_requirement;
     patient->memory_admission_time = allocation_time;
+    if (memory_occupied_slots(manager) > manager->peak_occupied) {
+        manager->peak_occupied = memory_occupied_slots(manager);
+    }
     update_external_fragmentation(manager);
     return 1;
 }
@@ -234,6 +252,13 @@ void memory_process_admission(MemoryManager *manager,
             manager, patient->memory_requirement, algorithm);
 
         if (start < 0) {
+            /* no hole big enough: the front waits, and so does everyone
+             * behind it (fifo, nobody skips the line) */
+            if (!patient->mem_wait_logged) {
+                sim_trace(current_time, "MEM_WAIT", patient->id,
+                          "no free block big enough");
+                patient->mem_wait_logged = 1;
+            }
             break;
         }
 
@@ -241,7 +266,58 @@ void memory_process_admission(MemoryManager *manager,
             break;
         }
 
+        {
+            char what[64];
+
+            snprintf(what, sizeof(what), "gets slots %d-%d, now READY",
+                     start, start + patient->memory_requirement - 1);
+            sim_trace(current_time, "MEM_ADMIT", patient->id, what);
+        }
+
         patient->state = PROCESS_READY;
         memory_admission_dequeue(queue);
     }
+}
+
+/* ---------------------------------------------------------------- */
+/* --memmap: a picture of the 6 slots over time (printed to stderr)   */
+/* ---------------------------------------------------------------- */
+
+static int memory_map_on = 0;
+static char last_map[MEMORY_SLOT_COUNT * (MAX_ID_LENGTH + 1) + 1];
+
+void memory_map_enable(int on)
+{
+    memory_map_on = on;
+    last_map[0] = '\0';
+}
+
+/* prints one row, but only if the slots look different from last time */
+void memory_print_map(const MemoryManager *manager, int now)
+{
+    char row[sizeof(last_map)];
+
+    if (!memory_map_on) {
+        return;
+    }
+
+    row[0] = '\0';
+    for (int i = 0; i < MEMORY_SLOT_COUNT; i++) {
+        const char *who = manager->slots[i].free ? "." : manager->slots[i].owner;
+        size_t used = strlen(row);
+
+        snprintf(row + used, sizeof(row) - used, " %-4s", who);
+    }
+
+    if (strcmp(row, last_map) == 0) {
+        return;                       /* nothing moved */
+    }
+    if (last_map[0] == '\0') {
+        fprintf(stderr, "MEMMAP time  | slot 0..5                     | used free fext\n");
+    }
+    strcpy(last_map, row);
+    fprintf(stderr, "MEMMAP t=%-4d|%s | %4d %4d %4d\n", now, row,
+            memory_occupied_slots(manager),
+            MEMORY_SLOT_COUNT - memory_occupied_slots(manager),
+            memory_external_fragmentation(manager));
 }
