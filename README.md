@@ -4,12 +4,7 @@ CS-3710 Operating Systems, Assignment 1 (Process Management).
 Scenario: **Emergency Hospital Management**. Patients are processes and the
 two doctors are two identical parallel service units.
 
-Group: **doc shes losing blood**
-
-<!-- TODO (teammates, spec Section 20): group member names, process model,
-     per-algorithm descriptions, design decisions and assumptions, metric
-     definitions. The sections below cover compile/run, testing, comparison,
-     optional features and the limitations that belong to them. -->
+Group: **Doc, she's losing blood!**
 
 Implemented algorithms:
 
