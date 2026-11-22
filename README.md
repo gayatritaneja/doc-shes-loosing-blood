@@ -239,8 +239,7 @@ the grouped bar charts in `analysis/graphs/`.
 
 - Aging is not implemented, so starvation of low-priority patients is possible
   (see the observations above).
-- The input parser accepts a priority of 0 and a quantum of 0, although the
-  specification calls both positive. Valid inputs are unaffected.
+- (fixed in assignment 2: priority 0 and quantum 0 are now rejected.). Valid inputs are unaffected.
 - `MAX_READY_QUEUE` is sampled just before each dispatch. For the
   non-preemptive algorithms this is the true maximum; for the preemptive one it
   is measured after arrivals are admitted at each event time.
