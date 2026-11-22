@@ -253,11 +253,11 @@ the grouped bar charts in `analysis/graphs/`.
 
 ---
 
-# assignment 2: memory management
+# Assignment 2: Memory Management
 
-this part adds memory to the a1 scheduler. a patient now needs space in the hospital (beds) before a doctor can see it.
+This part adds memory to the a1 scheduler. A patient now needs space in the hospital (beds) before a doctor can see it.
 
-## a2.1 the idea
+## A2.1 The Idea
 
 | in the hospital | in os terms |
 |---|---|
@@ -276,7 +276,7 @@ NEW -> BLOCKED_MEMORY / READY -> RUNNING -> TERMINATED
 - it keeps its beds while waiting for a doctor and even when preempted. it gives them back only when it finishes.
 - no compaction (we never move patients around to join holes).
 
-## a2.2 the 3 allocators
+## A2.2 The 3 allocators
 
 a "hole" (free run) = free beds next to each other. a patient needing k beds fits in a hole of size k or more.
 
@@ -290,14 +290,14 @@ ties (two holes of the same size): the one with the lower slot number. the patie
 
 code: `memory.c` (`memory_find_free_run` picks the hole, `memory_allocate` / `memory_deallocate`, `memory_process_admission` runs the fifo line).
 
-## a2.3 order of things at one time t
+## A2.3 Order of things at one time t
 
 1. patients finishing at t leave and give back their doctor and beds
 2. new arrivals at t join the bed line (in id order)
 3. give beds to the front of the line until the front doesn't fit
 4. the scheduler (FCFS / PRIORITY / PRIORITY_PREEMPTIVE) fills free doctors
 
-## a2.4 how to run
+## A2.4 How to run
 
 build (same as before):
 
@@ -325,7 +325,7 @@ sh analysis/compare_memory.sh                                        # csv for e
 - with an output file, nothing is printed on screen. the file only has the result (no messages).
 - the old commands still work exactly like before (`./scheduler FILE FCFS` prints the a1 table, `--memory BEST_FIT` also picks the allocator).
 
-## a2.5 input file
+## A2.5 Input File
 
 ```text
 N                                             number of patients (positive)
@@ -337,7 +337,7 @@ ID,ARRIVAL,PRIORITY,SERVICE,CATEGORY,SPACE_REQ,TABLE_REQ     N rows
 - rows can be in any order. blank lines at the end are fine.
 - bad files give a clear error and stop, for example: wrong number of rows, missing field, priority 0, Q 0, id with a space, duplicate id, SPACE_REQ 7, TABLE_REQ not 0.
 
-## a2.6 output file
+## A2.6 Output File
 
 no header row, sorted by id:
 
@@ -356,7 +356,7 @@ POOL,SPACE,6,PEAK_OCCUPIED,UTILIZATION_PCT,MAX_EXT_FRAG_SLOTS
 
 code: `a2_report.c`.
 
-## a2.7 metrics
+## A2.7 Metrics
 
 for each patient (A = arrival, M = got beds, S = first start, C = finish, B = service):
 
@@ -373,7 +373,7 @@ overall, with E = last finish - first arrival:
 - max ext frag = the worst moment of (free beds - biggest hole). all free or all full = 0
 - blocked for memory count = patients who didn't get their beds the moment they arrived
 
-## a2.8 comparison: 3 schedulers x 3 allocators
+## A2.8 Comparison: 3 schedulers x 3 allocators
 
 input: `tests/a2/hospital_mix.txt` (8 patients). p1-p5 arrive at 0 and fill all 6 beds. p2 and p4 are long, low priority checkups. the short ones leave holes behind. then p6, p7 (1 bed each) and p8 (2 beds) arrive at t=3.
 
@@ -401,7 +401,7 @@ what we see:
 - **avg waiting is the same for all 3 allocators** (for each scheduler). the 2 doctors are the real bottleneck here: best fit just turns p8's "waiting for beds" into "waiting for a doctor". memory utilization goes up though (75% vs 58%) because p8 holds its beds earlier.
 - **max fragmentation is 2 everywhere.** for example at t=9 the free beds are 1, 3 and 5: 3 free but the biggest hole is 1, so fext = 3 - 1 = 2 (under PRIORITY it's also 2 at t=2: holes 1, 2, 1). it comes from who leaves when, not from the allocator.
 
-### edge-case inputs (all in `tests/a2/`, checked for all 9 combinations)
+### Edge-case Inputs (all in `tests/a2/`, checked for all 9 combinations)
 
 | input | what it shows |
 |---|---|
@@ -410,7 +410,7 @@ what we see:
 | `idle_start_ids.txt` | nobody arrives until t=5. three patients arrive together: order is p1, p10, p2 (text order). at t=6 there are 3 free beds but not in a row, so p2 (3 beds) still waits: fragmentation blocking someone |
 | `hospital_mix.txt` | the comparison above |
 
-### memory vs a1 (no memory limits)
+### Memory vs A1 (no memory limits)
 
 `hol_blocking.txt` with FCFS + FIRST_FIT, compared to the same patients if beds didn't matter:
 
@@ -421,7 +421,7 @@ what we see:
 
 p2 could start at t=0 on the free doctor, but it has no bed, so doctor 2 sits idle until t=4. memory can leave doctors idle even when patients are waiting. on `hospital_mix` the averages stay the same as a1, because there the doctors (not the beds) are the bottleneck.
 
-## a2.9 discussion
+## a2.9 Discussion
 
 - **first fit:** fast and simple (stops at the first hole). but it uses up the holes at the start, so the beginning of memory gets chopped into small pieces.
 - **best fit:** leaves the big holes alone for big patients (that's why p8 got in straight away). downside: it leaves tiny leftover holes that are often too small for anyone, and it has to look at every hole.
@@ -429,7 +429,7 @@ p2 could start at t=0 on the free doctor, but it has no bed, so doctor 2 sits id
 - **fifo line + head-of-line blocking:** fair in the sense that nobody overtakes. but one big patient at the front can block small patients that would fit (`hol_blocking`: p2 and p3 wait behind p1, and later small arrivals would wait behind p4). better use of beds would let small ones skip ahead, but then a big patient could wait forever (starvation). the spec picks fifo, so no starvation but lower bed usage.
 - **compared to a1:** waiting now includes bed waiting. a patient can't be scheduled until it has beds, so the scheduler sometimes can't use a free doctor (lower utilization, lower throughput). and it works the other way too: the order the scheduler finishes patients decides which beds free up, so the scheduler changes the memory results (FCFS vs priority in the table).
 
-## a2.10 extra features
+## a2.10 Extra features
 
 - `--memmap`: prints a picture of the 6 beds every time it changes (to stderr, so the result file stays clean). for example `./scheduler tests/a2/idle_start_ids.txt FCFS FIRST_FIT --memmap`:
 
@@ -445,9 +445,9 @@ MEMMAP t=9   | .    .    .    .    .    .    |    0    6    0
 - `analysis/compare_memory.sh`: saves the csv for every a2 input in `analysis/results/`.
 - `--trace` also shows `MEM_WAIT` / `MEM_ADMIT` events.
 
-## a2.11 tests
+## a2.11 Tests
 
-`sh tests/run_tests.sh` now also checks:
+`sh Tests/run_tests.sh` now also checks:
 
 - every a2 input x 3 schedulers x 3 allocators against `tests/a2/expected/` (36 files, using the `INPUT SCHEDULER ALLOCATOR OUTPUT_FILE` command, and nothing printed on screen)
 - the same run 5 times gives the same output
@@ -456,7 +456,7 @@ MEMMAP t=9   | .    .    .    .    .    .    |    0    6    0
 
 142 checks in total, all passing.
 
-## a2.12 assumptions and limits
+## A2.12 Assumptions and Limits
 
 - only the SPACE pool (6 beds). TABLE_REQ must be 0.
 - no compaction and no other admission policy, only fifo.
@@ -464,11 +464,11 @@ MEMMAP t=9   | .    .    .    .    .    .    |    0    6    0
 
 ---
 
-# final project: concurrency, deadlock and integration
+# Final Project: Concurrency, Deadlock and Integration
 
 everything above is from assignment 1. this part covers the final project: shared resources, real threads, deadlock and how it all fits together with scheduling (a1) and memory (a2).
 
-## 1. the scenario
+## 1. The Scenario
 
 | in the hospital | in os terms |
 |---|---|
@@ -497,7 +497,7 @@ NEW -> BLOCKED_MEMORY -> READY -> RUNNING -> TERMINATED
 
 ---
 
-## 2. how the code is split up
+## 2. How the code is split up
 
 ```text
 io.c                read the input file and check it
@@ -527,7 +527,7 @@ how one time step works in `engine.c`:
 
 ---
 
-## 3. build and run
+## 3. Build and Run
 
 linux / mac:
 
@@ -570,7 +570,7 @@ sh tests/run_tests.sh          # or: CC=gcc sh tests/run_tests.sh
 
 ---
 
-## 4. input and output files
+## 4. Input and Output Files
 
 input (same as assignment 2, plus two optional parts at the end):
 
@@ -609,7 +609,7 @@ CHECK,COMPLETED_COUNT,...
 
 ---
 
-## 5. algorithms and metrics we kept
+## 5. Algorithms and Metrics we kept
 
 - scheduling (a1): `FCFS`, `PRIORITY`, `PRIORITY_PREEMPTIVE`. smaller priority number = more urgent. ties go to whoever came first, then the smaller id. preemption only happens for a strictly more urgent patient.
 - memory (a2): 6 slots in a row. `FIRST_FIT` takes the first hole that fits, `BEST_FIT` the smallest hole that fits, `WORST_FIT` the biggest hole. the memory line is fifo.
@@ -631,7 +631,7 @@ how the numbers are worked out:
 
 ---
 
-## 6. threads and locks
+## 6. Threads and Locks
 
 **threads**
 
@@ -663,7 +663,7 @@ a resource action takes 0 virtual time. the coordinator waits for the workers to
 
 ---
 
-## 7. rules for sharing resources
+## 7. Rules for Sharing Resources
 
 - each resource (`XRAY`, `MRI`, `NURSE_1`...) can be held by only 1 patient at a time. different copies (like `NURSE_1` and `NURSE_2`) can be used by different patients at the same time.
 - you can only release something you actually hold. releasing it twice gives an error (and the input checker catches it before the run starts).
@@ -673,7 +673,7 @@ a resource action takes 0 virtual time. the coordinator waits for the workers to
 
 ---
 
-## 8. deadlock
+## 8. Deadlock
 
 ### the 4 conditions for a deadlock, in our hospital
 
@@ -686,7 +686,7 @@ a resource action takes 0 virtual time. the coordinator waits for the workers to
 
 all 4 have to be true for a deadlock. we break **hold and wait**.
 
-### showing the deadlock (with prevention off)
+### Showing the Deadlock (with prevention off)
 
 the input `tests/concurrency/deadlock_reversed.txt` has p1 asking for XRAY then MRI and p2 asking for MRI then XRAY.
 
@@ -710,7 +710,7 @@ how we find it: every blocked patient is waiting for something that someone else
 
 there's also `./scheduler --deadlock-demo`, which does the same thing with 2 real threads that lock in opposite orders. both get stuck, a 300 ms timeout notices it, prints it and lets go. then it runs again with prevention on and both finish.
 
-### the prevention (always on normally): all or nothing
+### The Prevention (always on normally): All or Nothing
 
 - if you ask for something and it's free, you get it.
 - if it's busy, you **give back everything you're holding** and wait for all of it together (what you asked for + what you had).
@@ -736,7 +736,7 @@ CHECK,COMPLETED_COUNT,2
 
 if the normal run ever got stuck anyway, it would print who is stuck on what and exit. it doesn't hang.
 
-### downsides of this policy
+### Downsides of this Policy
 
 - more waiting: p2 waits 4 units (but that's better than waiting forever).
 - a resource that was given back might sit free for a bit, and it gets asked for again (more wait events).
@@ -746,7 +746,7 @@ if the normal run ever got stuck anyway, it would print who is stuck on what and
 
 ---
 
-## 9. examples you can run
+## 9. Examples you can Run
 
 all of these are checked automatically by `tests/run_tests.sh`.
 
@@ -805,13 +805,13 @@ D2 | P2 [0,1) | idle [1,4) | P2 [4,7)
 
 doctor 2 sits idle from 1 to 4 even though p3 is there: p2 is blocked on the xray and p3 has no memory. p2's resource_wait is 3 and p3's mem_wait is 4, and both add up correctly.
 
-### scheduling makes a difference
+### Scheduling Makes a Difference
 
 see "algorithm comparison" above. for example on `sample_hw`, average response is 2.38 with FCFS and 1.12 with PRIORITY_PREEMPTIVE. with resources, the scheduler also decides who gets to ask for the resource first (in the nurses example, p3 jumps ahead because it's critical).
 
 ---
 
-## 10. trade-offs
+## 10. Trade-Offs
 
 - **waiting vs no deadlock:** all or nothing turns a "stuck forever" into "wait a bit longer" (p2 waits 4). a fixed order would have no give-backs, but every input would have to follow it.
 - **throughput vs utilization:** a blocked patient gives its doctor to someone else (good), but keeps its memory, which can block new patients (doctor 2 was idle 1-4). best fit used memory better (81.7% vs 71.7%) but throughput didn't change, because the doctors were the bottleneck.
@@ -821,7 +821,7 @@ see "algorithm comparison" above. for example on `sample_hw`, average response i
 
 ---
 
-## 11. assumptions and limits
+## 11. Assumptions and Limits
 
 - rows have 7 fields like the spec says, and TABLE_REQ must be 0 (the hospital has no table pool). older 5-field rows get `SPACE_REQ=1` and 6-field rows still work too. `Q` is read but not used.
 - resource actions take 0 time. a release at the very end of service happens before the patient finishes.
@@ -831,8 +831,8 @@ see "algorithm comparison" above. for example on `sample_hw`, average response i
 - `--unsafe` is only for the demo. it stops at the first deadlock and doesn't try to fix it.
 - the deadlock check assumes each resource has 1 copy (true for every hospital resource).
 
-## 12. extra features
+## 12. Extra features
 
-the a1 extras (gantt, stats, compare) are described above. new for the final project: the event trace (`--trace`) and the deadlock loop check in `--unsafe`.
+new for the final project: the event trace (`--trace`) and the deadlock loop check in `--unsafe`.
 
 ---
